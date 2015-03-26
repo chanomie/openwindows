@@ -9,6 +9,7 @@ use File::HomeDir;
 use JSON;
 use Mac::PropertyList qw(parse_plist_fh create_from_hash);
 use LWP::UserAgent;
+use URI;
 
 =head1 SYNOPSIS
 =cut
@@ -20,11 +21,12 @@ sub main(@ARGV) {
   my $CONFIG = {};
   my $DATA;
   my $userAgent = LWP::UserAgent->new();
-
+  my $indoorTempurature;
+  ## push @{ $userAgent->requests_redirectable }, 'POST';
+  
   ## Initialize the Configuration File
   $DATA = initialize($CONFIG);
-  authenticateNest($CONFIG, $DATA, $userAgent);
-  
+  $indoorTempurature = getIndoorTempurature($CONFIG, $DATA, $userAgent);
   storeData($CONFIG, $DATA);
   
 }
@@ -56,6 +58,8 @@ sub initialize($) {
     . '&code=AUTHORIZATION_CODE&client_secret='
     . $CONFIG->{'NEST-CLIENT-SECRET'}
     . '&grant_type=authorization_code';
+    
+  $CONFIG->{'NEST-DATA-URL'} = 'https://developer-api.nest.com/';
     
   if($^O eq "darwin") {
     $CONFIG->{'DATA-FILE-TYPE'} = 'plist';
@@ -115,6 +119,44 @@ sub storeData($$) {
   }
 }
 
+sub getIndoorTempurature($$$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  my $userAgent = shift;
+  
+  authenticateNest($CONFIG, $DATA, $userAgent);
+  
+  my $nestDataUrl = URI->new($CONFIG->{'NEST-DATA-URL'});
+  $nestDataUrl->query_form(auth => $DATA->{'NEST-ACCESS-TOKEN'});
+  
+  my $response = $userAgent->get( 
+    $nestDataUrl,
+	'Accept'   => 'application/json'
+  );
+  
+  if($response->code() == 200) {
+    my $dataJson = decode_json( $response->decoded_content() );
+    
+    # Get the first thermostat.  If there are no thermostats or multiple just throw
+    # and error for now.
+    my @thermostatsNames = keys $dataJson->{"devices"}->{"thermostats"};
+    my $thermostatCount = scalar(@thermostatsNames);
+    
+    if($thermostatCount == 1) {
+      my $thermostatId = $thermostatsNames[0];
+      my $indoorTempurature = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"ambient_temperature_f"};
+    } else {
+      confess("Only works with one thermostat.  Result is showing [" . $thermostatCount . "]");
+    }    
+    
+
+  } else {
+    confess("Failed to get data from Nest [" . $nestDataUrl . "] with response of:\n"
+			. $response->as_string());
+  }  
+  
+}
+
 sub authenticateNest($$$) {
   my $CONFIG = shift;
   my $DATA = shift;
@@ -141,8 +183,7 @@ sub authenticateNest($$$) {
     $accessTokenUrl =~ s/AUTHORIZATION_CODE/$authorizationCode/;
 
 	my $response = $userAgent->post($accessTokenUrl);
-    my $httpResponseCode = $response->code();
-	if($httpResponseCode == 200) {
+	if($response->code() == 200) {
 	  my $dataJson = decode_json( $response->decoded_content() );
 	  $DATA->{'NEST-ACCESS-TOKEN'} = $dataJson->{"access_token"};
 	} else {
