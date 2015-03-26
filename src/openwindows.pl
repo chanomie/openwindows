@@ -9,6 +9,7 @@ use File::HomeDir;
 use JSON;
 use Mac::PropertyList qw(parse_plist_fh create_from_hash);
 use LWP::UserAgent;
+use String::Util qw(trim);
 use URI;
 
 =head1 SYNOPSIS
@@ -20,15 +21,30 @@ use URI;
 sub main(@ARGV) {
   my $CONFIG = {};
   my $DATA;
+  my $commandString = shift(@ARGV);
   my $userAgent = LWP::UserAgent->new();
-  my $indoorTempurature;
-  ## push @{ $userAgent->requests_redirectable }, 'POST';
   
   ## Initialize the Configuration File
   $DATA = initialize($CONFIG);
-  $indoorTempurature = getIndoorTempurature($CONFIG, $DATA, $userAgent);
-  storeData($CONFIG, $DATA);
   
+  if(defined($commandString)) {
+    if($commandString eq "setNestClientSecret") {
+      $DATA->{'NEST-CLIENT-SECRET'} = shift(@ARGV);
+    } elsif ($commandString eq "setForecastApiKey") {
+      $DATA->{'FORECAST-API-KEY'} = shift(@ARGV);
+    }
+  } else {
+    validateConfigAndData($CONFIG, $DATA);
+    #my ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
+    #    getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent);
+      
+    #print("Indoor Temperature: [$indoorTemperature], hvacMode [$hvacMode], "
+    #  . "targetTemperatureLow [$targetTemperatureLow], "
+    #  . "targetTemperatureHigh [$targetTemperatureHigh]\n");
+  
+    #getOutdoorTemperature($CONFIG, $DATA, $userAgent);
+  }
+  storeData($CONFIG, $DATA);
 }
 
 =head2 initialize
@@ -48,17 +64,10 @@ sub initialize($) {
 
   ## Config is just setup in the file.
   $CONFIG->{'NEST-CLIENT-ID'} = '4ada2c61-9441-43aa-93cf-e497818dc5db';
-  $CONFIG->{'NEST-CLIENT-SECRET'} = $ENV{'nestapikey'};
   $CONFIG->{'NEST-AUTHORIZE-URL'} = 'https://home.nest.com/login/oauth2?client_id='
     . $CONFIG->{'NEST-CLIENT-ID'}
     . '&state=STATE';
-  
-  $CONFIG->{'NEST-ACCESS-TOKEN-URL'} = 'https://api.home.nest.com/oauth2/access_token?client_id='
-    . $CONFIG->{'NEST-CLIENT-ID'}
-    . '&code=AUTHORIZATION_CODE&client_secret='
-    . $CONFIG->{'NEST-CLIENT-SECRET'}
-    . '&grant_type=authorization_code';
-    
+      
   $CONFIG->{'NEST-DATA-URL'} = 'https://developer-api.nest.com/';
     
   if($^O eq "darwin") {
@@ -73,6 +82,36 @@ sub initialize($) {
     $DATA = loadData($CONFIG, $DATA);
   } else {
     $DATA = {};
+  }
+  
+  $CONFIG->{'NEST-ACCESS-TOKEN-URL'} = 'https://api.home.nest.com/oauth2/access_token?client_id='
+    . $CONFIG->{'NEST-CLIENT-ID'}
+    . '&code=AUTHORIZATION_CODE&client_secret='
+    . $DATA->{'NEST-CLIENT-SECRET'}
+    . '&grant_type=authorization_code';
+ 
+   return $DATA;   
+}
+
+sub validateConfigAndData($$) {
+  my $CONFIG = shift;
+  my $DATA =shift;
+  my $validationErrors = [];
+
+  ## Validate all the settings exists.
+  if(!exists $DATA->{'NEST-CLIENT-SECRET'} || length(trim($DATA->{'NEST-CLIENT-SECRET'})) == 0) {
+  	push($validationErrors, "Missing config for [NEST-CLIENT-SECRET]. Set with command setNestClientSecret.");
+  }
+  if(!exists $DATA->{'FORECAST-API-KEY'} || length(trim($DATA->{'FORECAST-API-KEY'})) == 0) {
+  	push($validationErrors, "Missing config for [FORECAST-API-KEY]. Set with command setForecastApiKey.");
+  }
+  
+  my $errorCount = scalar(@{$validationErrors});
+  if($errorCount > 0) {
+    for my $validationError (@$validationErrors){
+      print(STDERR "$validationError\n");
+    }
+    confess("Missing required configuration.  Please set configuration.");
   }
 }
 
@@ -119,7 +158,7 @@ sub storeData($$) {
   }
 }
 
-sub getIndoorTempurature($$$) {
+sub getIndoorTemperatureAndTargetNest($$$) {
   my $CONFIG = shift;
   my $DATA = shift;
   my $userAgent = shift;
@@ -143,18 +182,25 @@ sub getIndoorTempurature($$$) {
     my $thermostatCount = scalar(@thermostatsNames);
     
     if($thermostatCount == 1) {
+      # Need to take three different modes into account.
+      # 1. Cooling - should be colder than the indoor temperature
+      # 2. Heating - should be hotter than the indoor temperature
+      # 3. Range (heat-cool) - should be in between the desired range
+      
       my $thermostatId = $thermostatsNames[0];
-      my $indoorTempurature = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"ambient_temperature_f"};
+      my $indoorTemperature = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"ambient_temperature_f"};
+      my $hvacMode = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"hvac_mode"};
+      my $targetTemperatureLow = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"target_temperature_low_f"};
+      my $targetTemperatureHigh = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"target_temperature_high_f"};
+      
+      return ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh);
     } else {
       confess("Only works with one thermostat.  Result is showing [" . $thermostatCount . "]");
     }    
-    
-
   } else {
     confess("Failed to get data from Nest [" . $nestDataUrl . "] with response of:\n"
 			. $response->as_string());
   }  
-  
 }
 
 sub authenticateNest($$$) {
