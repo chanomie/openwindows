@@ -32,17 +32,36 @@ sub main(@ARGV) {
       $DATA->{'NEST-CLIENT-SECRET'} = shift(@ARGV);
     } elsif ($commandString eq "setForecastApiKey") {
       $DATA->{'FORECAST-API-KEY'} = shift(@ARGV);
+    } elsif ($commandString eq "setLatLong") {
+      $DATA->{'LATITUDE-LONGITUDE'} = shift(@ARGV);
+    } elsif ($commandString eq "setWindowState") {
+      $DATA->{'WINDOW-STATE'} = shift(@ARGV);
+      $DATA->{'WINDOW-STATE-UPDATED'} = time();
     }
+    
+    
   } else {
     validateConfigAndData($CONFIG, $DATA);
-    #my ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
-    #    getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent);
-      
-    #print("Indoor Temperature: [$indoorTemperature], hvacMode [$hvacMode], "
-    #  . "targetTemperatureLow [$targetTemperatureLow], "
-    #  . "targetTemperatureHigh [$targetTemperatureHigh]\n");
-  
-    #getOutdoorTemperature($CONFIG, $DATA, $userAgent);
+    my ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
+        getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent);
+        
+    my $outdoorTemperature = getOutdoorTemperature($CONFIG, $DATA, $userAgent);
+    
+    print("indoorTemperature [$indoorTemperature], hvacMode [$hvacMode], "
+        . "targetTemperatureLow [$targetTemperatureLow], "
+        . "targetTemperatureHigh [$targetTemperatureHigh], "
+        . "outdoorTemperature [$outdoorTemperature]\n");
+    
+    if($hvacMode eq "heat-cool") {
+      ## Trying to keep in a range, so just check if outdoor is in the range.
+      if($outdoorTemperature > $targetTemperatureLow && $outdoorTemperature < $targetTemperatureHigh) {
+        setWindowState($CONFIG, $DATA, 'open');
+      } else {
+        setWindowState($CONFIG, $DATA, 'closed');
+      }
+    } else {
+      confess("Not yet implemented dealing with hvac mode of: $hvacMode");
+    }
   }
   storeData($CONFIG, $DATA);
 }
@@ -67,8 +86,14 @@ sub initialize($) {
   $CONFIG->{'NEST-AUTHORIZE-URL'} = 'https://home.nest.com/login/oauth2?client_id='
     . $CONFIG->{'NEST-CLIENT-ID'}
     . '&state=STATE';
+  $CONFIG->{'NEST-ACCESS-TOKEN-URL'} = 'https://api.home.nest.com/oauth2/access_token?client_id='
+    . $CONFIG->{'NEST-CLIENT-ID'}
+    . '&code=AUTHORIZATION_CODE&client_secret='
+    . 'NEST-CLIENT-SECRET'
+    . '&grant_type=authorization_code';
       
   $CONFIG->{'NEST-DATA-URL'} = 'https://developer-api.nest.com/';
+  $CONFIG->{'FORECAST-IO-URL'} = "https://api.forecast.io/forecast/APIKEY/LATLONG?exclude=minutely,hourly,daily,alerts,flags";
     
   if($^O eq "darwin") {
     $CONFIG->{'DATA-FILE-TYPE'} = 'plist';
@@ -84,13 +109,11 @@ sub initialize($) {
     $DATA = {};
   }
   
-  $CONFIG->{'NEST-ACCESS-TOKEN-URL'} = 'https://api.home.nest.com/oauth2/access_token?client_id='
-    . $CONFIG->{'NEST-CLIENT-ID'}
-    . '&code=AUTHORIZATION_CODE&client_secret='
-    . $DATA->{'NEST-CLIENT-SECRET'}
-    . '&grant_type=authorization_code';
- 
-   return $DATA;   
+  $CONFIG->{'NEST-ACCESS-TOKEN-URL'} =~ s/NEST-CLIENT-SECRET/$DATA->{'NEST-CLIENT-SECRET'}/;
+  $CONFIG->{'FORECAST-IO-URL'} =~ s/APIKEY/$DATA->{'FORECAST-API-KEY'}/;
+  $CONFIG->{'FORECAST-IO-URL'} =~ s/LATLONG/$DATA->{'LATITUDE-LONGITUDE'}/;
+
+  return $DATA;   
 }
 
 sub validateConfigAndData($$) {
@@ -104,6 +127,9 @@ sub validateConfigAndData($$) {
   }
   if(!exists $DATA->{'FORECAST-API-KEY'} || length(trim($DATA->{'FORECAST-API-KEY'})) == 0) {
   	push($validationErrors, "Missing config for [FORECAST-API-KEY]. Set with command setForecastApiKey.");
+  }
+  if(!exists $DATA->{'LATITUDE-LONGITUDE'} || length(trim($DATA->{'LATITUDE-LONGITUDE'})) == 0) {
+  	push($validationErrors, "Missing config for [LATITUDE-LONGITUDE]. Set with command setLatLong.");
   }
   
   my $errorCount = scalar(@{$validationErrors});
@@ -192,7 +218,7 @@ sub getIndoorTemperatureAndTargetNest($$$) {
       my $hvacMode = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"hvac_mode"};
       my $targetTemperatureLow = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"target_temperature_low_f"};
       my $targetTemperatureHigh = $dataJson->{"devices"}->{"thermostats"}->{$thermostatId}->{"target_temperature_high_f"};
-      
+            
       return ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh);
     } else {
       confess("Only works with one thermostat.  Result is showing [" . $thermostatCount . "]");
@@ -236,6 +262,52 @@ sub authenticateNest($$$) {
 	  confess("Failed to get a valid oauth access token with response of:\n"
 			. $response->as_string());
 	}
+  }
+}
+
+sub getOutdoorTemperature($$$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  my $userAgent = shift;
+  my $forecastIoUrl = $CONFIG->{'FORECAST-IO-URL'};
+  
+  my $response = $userAgent->get( 
+    $forecastIoUrl,
+	'Accept'   => 'application/json'
+  );
+  
+  if($response->code() == 200) {
+    my $dataJson = decode_json( $response->decoded_content() );
+    my $outdoorTemperature = $dataJson->{'currently'}->{'temperature'};
+
+    return $outdoorTemperature;
+  } else {
+    confess("Failed to get a valid Forecast IO response:\n"
+	    . $response->as_string());
+  }
+  
+  ## https://api.forecast.io/forecast/058e5e4407119ab672a888370c36f6a4/38.6332990,-121.3346720
+}
+
+sub setWindowState($$$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  my $newWindowState = shift;
+  my $existingWindowState = $DATA->{'WINDOW-STATE'};
+  
+  if(!exists $DATA->{'WINDOW-STATE'} || length(trim($DATA->{'WINDOW-STATE'})) == 0) {
+    $DATA->{'WINDOW-STATE'} = 'closed';
+    $DATA->{'WINDOW-STATE-UPDATED'} = time();
+  }
+
+  if($existingWindowState eq "opened" && $newWindowState ne "opened") {
+    print("Close the windows\n");
+    $DATA->{'WINDOW-STATE'} = 'closed';
+    $DATA->{'WINDOW-STATE-UPDATED'} = time();
+  } elsif($existingWindowState eq "closed" && $newWindowState ne "closed") {
+    print("Open the windows\n");
+    $DATA->{'WINDOW-STATE'} = 'opened';
+    $DATA->{'WINDOW-STATE-UPDATED'} = time();
   }
 }
 
