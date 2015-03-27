@@ -6,6 +6,7 @@ use Carp; # carp is warn, confess is exception
 use Config::JSON; # http://search.cpan.org/~rizen/Config-JSON-1.5202/lib/Config/JSON.pm
 use Data::Dumper;
 use File::HomeDir;
+use Growl::GNTP;
 use JSON;
 use Mac::PropertyList qw(parse_plist_fh create_from_hash);
 use LWP::UserAgent;
@@ -37,6 +38,8 @@ sub main(@ARGV) {
     } elsif ($commandString eq "setWindowState") {
       $DATA->{'WINDOW-STATE'} = shift(@ARGV);
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
+    } elsif ($commandString eq 'growlNotify') {
+      growlNotify();
     }
     
     
@@ -309,6 +312,23 @@ sub setWindowState($$$) {
     $DATA->{'WINDOW-STATE'} = 'opened';
     $DATA->{'WINDOW-STATE-UPDATED'} = time();
   }
+}
+
+sub growlNotify() {
+  my $growl = Growl::GNTP->new(
+    AppName => "Open Windows",
+    Debug => '1');
+    
+  $growl->register([{
+    Name => 'OPEN_WINDOW_STATUS',
+    DisplayName => 'Open Windows'
+  }]);
+    
+  $growl->notify(
+    Event => 'OPEN_WINDOW_STATUS',
+    Title => 'Open Windows',
+    Message => 'Do stuff with your windows'
+  );
 }
 
 ###
