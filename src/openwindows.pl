@@ -1,6 +1,7 @@
-#!/usr/bin/perl
+#!/usr/bin/perl -sw
 
 use strict;
+use warnings;
 use Browser::Open qw( open_browser );
 use Carp; # carp is warn, confess is exception
 use Config::JSON; # http://search.cpan.org/~rizen/Config-JSON-1.5202/lib/Config/JSON.pm
@@ -12,6 +13,7 @@ use Mac::PropertyList qw(parse_plist_fh create_from_hash);
 use LWP::UserAgent;
 use String::Util qw(trim);
 use URI;
+use vars qw($v);
 
 =head1 SYNOPSIS
 =cut
@@ -19,7 +21,7 @@ use URI;
 ###
 ## Main function
 ###
-sub main(@ARGV) {
+sub main(@) {
   my $CONFIG = {};
   my $DATA;
   my $commandString = shift(@ARGV);
@@ -39,7 +41,7 @@ sub main(@ARGV) {
       $DATA->{'WINDOW-STATE'} = shift(@ARGV);
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
     } elsif ($commandString eq 'growlNotify') {
-      growlNotify();
+      growlNotify($CONFIG, $DATA, "Test Title", "Growl test message");
     }
     
     
@@ -53,14 +55,16 @@ sub main(@ARGV) {
     print("indoorTemperature [$indoorTemperature], hvacMode [$hvacMode], "
         . "targetTemperatureLow [$targetTemperatureLow], "
         . "targetTemperatureHigh [$targetTemperatureHigh], "
-        . "outdoorTemperature [$outdoorTemperature]\n");
+        . "outdoorTemperature [$outdoorTemperature], "
+        . "windowState [$DATA->{'WINDOW-STATE'}]\n")
+    if $v;
     
     if($hvacMode eq "heat-cool") {
       ## Trying to keep in a range, so just check if outdoor is in the range.
       if($outdoorTemperature > $targetTemperatureLow && $outdoorTemperature < $targetTemperatureHigh) {
-        setWindowState($CONFIG, $DATA, 'open');
+        setWindowState($CONFIG, $DATA, $outdoorTemperature, $indoorTemperature, 'open');
       } else {
-        setWindowState($CONFIG, $DATA, 'closed');
+        setWindowState($CONFIG, $DATA, $outdoorTemperature, $indoorTemperature, 'closed');
       }
     } else {
       confess("Not yet implemented dealing with hvac mode of: $hvacMode");
@@ -97,6 +101,9 @@ sub initialize($) {
       
   $CONFIG->{'NEST-DATA-URL'} = 'https://developer-api.nest.com/';
   $CONFIG->{'FORECAST-IO-URL'} = "https://api.forecast.io/forecast/APIKEY/LATLONG?exclude=minutely,hourly,daily,alerts,flags";
+  
+  ## How long should Growl notifications be paused after one is sent?
+  $CONFIG->{'GROWL-QUIET-TIME'} = 1800;
     
   if($^O eq "darwin") {
     $CONFIG->{'DATA-FILE-TYPE'} = 'plist';
@@ -292,42 +299,53 @@ sub getOutdoorTemperature($$$) {
   ## https://api.forecast.io/forecast/058e5e4407119ab672a888370c36f6a4/38.6332990,-121.3346720
 }
 
-sub setWindowState($$$) {
+sub setWindowState($$$$$) {
   my $CONFIG = shift;
   my $DATA = shift;
   my $newWindowState = shift;
+  my $outdoorTemperature = shift;
+  my $indoorTemperature = shift;
+  my $currentTime = time();
   my $existingWindowState = $DATA->{'WINDOW-STATE'};
   
   if(!exists $DATA->{'WINDOW-STATE'} || length(trim($DATA->{'WINDOW-STATE'})) == 0) {
     $DATA->{'WINDOW-STATE'} = 'closed';
-    $DATA->{'WINDOW-STATE-UPDATED'} = time();
+    $DATA->{'WINDOW-STATE-UPDATED'} = $currentTime;
   }
 
-  if($existingWindowState eq "opened" && $newWindowState ne "opened") {
-    print("Close the windows\n");
-    $DATA->{'WINDOW-STATE'} = 'closed';
-    $DATA->{'WINDOW-STATE-UPDATED'} = time();
-  } elsif($existingWindowState eq "closed" && $newWindowState ne "closed") {
-    print("Open the windows\n");
-    $DATA->{'WINDOW-STATE'} = 'opened';
-    $DATA->{'WINDOW-STATE-UPDATED'} = time();
+  ## Only update if it's been more than 30 minutes (1800 seconds)
+  if(($currentTime - $DATA->{'WINDOW-STATE-UPDATED'}) > $CONFIG->{'GROWL-QUIET-TIME'}) {
+    my $message = "It's $indoorTemperature insides and $outdoorTemperature outside.";
+    if($existingWindowState eq "opened" && $newWindowState ne "opened") {
+      growlNotify($CONFIG, $DATA, "Close the windows.", $message);
+      $DATA->{'WINDOW-STATE'} = 'closed';
+      $DATA->{'WINDOW-STATE-UPDATED'} = time();
+    } elsif($existingWindowState eq "closed" && $newWindowState ne "closed") {
+      growlNotify($CONFIG, $DATA, "Open the windows.", $message);
+      $DATA->{'WINDOW-STATE'} = 'opened';
+      $DATA->{'WINDOW-STATE-UPDATED'} = time();
+    }
   }
 }
 
-sub growlNotify() {
+sub growlNotify($$$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  my $title = shift;
+  my $message = shift;
+
   my $growl = Growl::GNTP->new(
-    AppName => "Open Windows",
-    Debug => '1');
+    AppName => "Open the Windows");
     
   $growl->register([{
     Name => 'OPEN_WINDOW_STATUS',
-    DisplayName => 'Open Windows'
+    DisplayName => 'Open the Windows'
   }]);
     
   $growl->notify(
     Event => 'OPEN_WINDOW_STATUS',
-    Title => 'Open Windows',
-    Message => 'Do stuff with your windows'
+    Title => $title,
+    Message => $message
   );
 }
 
