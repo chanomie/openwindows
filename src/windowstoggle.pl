@@ -352,12 +352,12 @@ sub growlNotify($$$) {
   my $message = shift;
 
   my $growl = Growl::GNTP->new(
-    AppName => "Open the Windows",
+    AppName => "Windows.Toggle",
     Debug => $v);
     
   $growl->register([{
     Name => 'OPEN_WINDOW_STATUS',
-    DisplayName => 'Open the Windows'
+    DisplayName => 'Windows.Toggle'
   }]);
     
   $growl->notify(
