@@ -13,7 +13,7 @@ use Mac::PropertyList qw(parse_plist_fh create_from_hash);
 use LWP::UserAgent;
 use String::Util qw(trim);
 use URI;
-use vars qw($v);
+use vars qw($v $h);
 
 =head1 SYNOPSIS
 =cut
@@ -29,8 +29,11 @@ sub main(@) {
   
   ## Initialize the Configuration File
   $DATA = initialize($CONFIG);
+
+  if($h) {
+    displayHelp();
   
-  if(defined($commandString)) {
+  } elsif(defined($commandString)) {
     if($commandString eq "setNestClientSecret") {
       $DATA->{'NEST-CLIENT-SECRET'} = shift(@ARGV);
     } elsif ($commandString eq "setForecastApiKey") {
@@ -44,10 +47,13 @@ sub main(@) {
       $DATA->{'NEST-ACCESS-TOKEN'} = shift(@ARGV);
     } elsif ($commandString eq 'growlNotify') {
       growlNotify($CONFIG, $DATA, "Test Title", "Growl test message");
+    } else {
+      carp("Unknown command [" . $commandString . "]");
+      displayHelp();
     }
     
-    
   } else {
+  
     validateConfigAndData($CONFIG, $DATA);
     my ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
         getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent);
@@ -135,6 +141,22 @@ sub initialize($) {
   $CONFIG->{'FORECAST-IO-URL'} =~ s/LATLONG/$DATA->{'LATITUDE-LONGITUDE'}/;
 
   return $DATA;   
+}
+
+sub displayHelp() {
+  print("Usage: windowstoggle.pl [command]\n");
+  print("\n");
+  print("Standard commands\n");
+  print("  -none-                 passing no command will run the standard cycle of\n");
+  print("                         checking temperatures and sending a grown notification\n");
+  print("                         if the windows should be opened/closed\n");
+  print("  setNestClientSecret    sets the Nest client secret for the application\n");
+  print("  setForecastApiKey      sets the Forecast.io API key for the application\n");
+  print("  setLatLong             sets the Latitude and Longitude to use for checking\n");
+  print("                         the outside temprature\n");
+  print("  setWindowState         sets the current state of the windows to opened/closed\n");
+  print("  setNestAccessToken     sets the Nest access token to skip OAuth dance\n");
+  print("  growlNotify            sends a test growl notification\n");  
 }
 
 sub validateConfigAndData($$) {
