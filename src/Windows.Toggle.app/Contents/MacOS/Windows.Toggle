@@ -4,9 +4,11 @@ use strict;
 use warnings;
 use Browser::Open qw( open_browser );
 use Carp; # carp is warn, confess is exception
+use Cwd qw ( cwd realpath );
 use Config::JSON; # http://search.cpan.org/~rizen/Config-JSON-1.5202/lib/Config/JSON.pm
 use Data::Dumper;
 use File::HomeDir;
+use File::Spec;
 use Growl::GNTP;
 use JSON;
 use Mac::PropertyList qw(parse_plist_fh create_from_hash);
@@ -46,7 +48,7 @@ sub main(@) {
     } elsif ($commandString eq "setNestAccessToken") {
       $DATA->{'NEST-ACCESS-TOKEN'} = shift(@ARGV);
     } elsif ($commandString eq 'growlNotify') {
-      growlNotify($CONFIG, $DATA, "Test Title", "Growl test message");
+      growlNotify($CONFIG, $DATA, "Test Title", "Growl test message", "opened");
     } else {
       carp("Unknown command [" . $commandString . "]");
       displayHelp();
@@ -125,6 +127,17 @@ sub initialize($) {
   if($^O eq "darwin") {
     $CONFIG->{'DATA-FILE-TYPE'} = 'plist';
     $CONFIG->{'DATA-FILE'} = File::HomeDir->my_home . '/Library/Preferences/net.chaosserver.OpenYourWindows.plist';
+    
+    # Get Script Directory
+    my $scriptFilePath = (File::Spec->splitpath(File::Spec->canonpath($0)))[1];
+    
+    # Get Relative Icon Files and Cleanup with realpath
+    $CONFIG->{'OPEN-ICON-FILE'} =
+      realpath(File::Spec->catfile( $scriptFilePath, "..", "Resources", "Windows.Toggle.icns" ));
+
+    $CONFIG->{'CLOSE-ICON-FILE'} =
+      realpath(File::Spec->catfile( $scriptFilePath, "..", "Resources", "Windows.Toggle-closed.icns" ));
+    
   } else {
     confess("Unknown OS [" . $^O . "], so don't know how to store the property files.");
   }
@@ -354,11 +367,11 @@ sub setWindowState($$$$$) {
   if(($currentTime - $DATA->{'WINDOW-STATE-UPDATED'}) > $CONFIG->{'GROWL-QUIET-TIME'}) {
     my $message = "It's $indoorTemperature insides and $outdoorTemperature outside.";
     if($existingWindowState eq "opened" && $newWindowState ne "opened") {
-      growlNotify($CONFIG, $DATA, "Close the windows.", $message);
+      growlNotify($CONFIG, $DATA, "Close the windows.", $message, "closed");
       $DATA->{'WINDOW-STATE'} = 'closed';
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
     } elsif($existingWindowState eq "closed" && $newWindowState ne "closed") {
-      growlNotify($CONFIG, $DATA, "Open the windows.", $message);
+      growlNotify($CONFIG, $DATA, "Open the windows.", $message, "opened");
       $DATA->{'WINDOW-STATE'} = 'opened';
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
     }
@@ -367,12 +380,18 @@ sub setWindowState($$$$$) {
   }
 }
 
-sub growlNotify($$$) {
+sub growlNotify($$$$) {
   my $CONFIG = shift;
   my $DATA = shift;
   my $title = shift;
   my $message = shift;
-
+  my $icon = shift;  
+  my $iconPath = $CONFIG->{'OPEN-ICON-FILE'};
+  
+  if($icon eq "closed") {
+    $iconPath = $CONFIG->{'CLOSE-ICON-FILE'};
+  }	
+  
   my $growl = Growl::GNTP->new(
     AppName => "Windows.Toggle",
     Debug => $v);
@@ -385,7 +404,8 @@ sub growlNotify($$$) {
   $growl->notify(
     Event => 'OPEN_WINDOW_STATUS',
     Title => $title,
-    Message => $message
+    Message => $message,
+    Icon => $iconPath
   );
 }
 
