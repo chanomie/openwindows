@@ -47,6 +47,8 @@ sub main(@) {
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
     } elsif ($commandString eq "setNestAccessToken") {
       $DATA->{'NEST-ACCESS-TOKEN'} = shift(@ARGV);
+    } elsif ($commandString eq "setGrowlPeerList") {
+      $DATA->{'GROWL-PEER-LIST'} = shift(@ARGV);
     } elsif ($commandString eq 'growlNotify') {
       growlNotify($CONFIG, $DATA, "Test Title", "Growl test message", "opened");
     } else {
@@ -169,7 +171,9 @@ sub displayHelp() {
   print("                         the outside temprature\n");
   print("  setWindowState         sets the current state of the windows to opened/closed\n");
   print("  setNestAccessToken     sets the Nest access token to skip OAuth dance\n");
-  print("  growlNotify            sends a test growl notification\n");  
+  print("  setGrowlPeerList       sets the peer list of where to send growl notifications.\n");
+  print("                         should be host1:port,host2:port\n");
+  print("  growlNotify            sends a test growl notification\n");
 }
 
 sub validateConfigAndData($$) {
@@ -387,26 +391,49 @@ sub growlNotify($$$$) {
   my $message = shift;
   my $icon = shift;  
   my $iconPath = $CONFIG->{'OPEN-ICON-FILE'};
+  my $growlPeerList = $DATA->{'GROWL-PEER-LIST'};
+  
+  if(!exists $DATA->{'GROWL-PEER-LIST'} || length(trim($DATA->{'GROWL-PEER-LIST'})) == 0) {
+    $growlPeerList = "localhost:23053";
+  }
   
   if($icon eq "closed") {
     $iconPath = $CONFIG->{'CLOSE-ICON-FILE'};
-  }	
+  }
   
-  my $growl = Growl::GNTP->new(
-    AppName => "Windows.Toggle",
-    Debug => $v);
+  my @growlPeerListArray = split(',', $growlPeerList);
+  for my $growlPeer (@growlPeerListArray) {
+    my ($growlPeerHost, $growlPeerPort, $growlPassword) = split(':', $growlPeer);
+    if(!defined $growlPeerPort) {
+      $growlPeerPort = 23053;
+    }
+    if(!defined $growlPassword) {
+      $growlPassword = '';
+    }
+
+	print("Creating a new Growl Object for $growlPeerHost") if $v;
+    my $growl = Growl::GNTP->new(
+      AppName => "Windows.Toggle",
+      PeerHost => $growlPeerHost,
+      PeerPort => $growlPeerPort,
+      Password => $growlPassword,
+      Icon => $iconPath,
+      Debug => $v);
     
-  $growl->register([{
-    Name => 'OPEN_WINDOW_STATUS',
-    DisplayName => 'Windows.Toggle'
-  }]);
+	print("Registering a new Growl Command") if $v;
+    $growl->register([{
+      Name => 'OPEN_WINDOW_STATUS',
+      DisplayName => 'Windows.Toggle'
+    }]);
     
-  $growl->notify(
-    Event => 'OPEN_WINDOW_STATUS',
-    Title => $title,
-    Message => $message,
-    Icon => $iconPath
-  );
+	print("Notifying a new Growl Command") if $v;
+    $growl->notify(
+      Event => 'OPEN_WINDOW_STATUS',
+      Title => $title,
+      Message => $message,
+      Icon => $iconPath
+    );    
+  }  
 }
 
 ###
