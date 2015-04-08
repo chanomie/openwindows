@@ -107,13 +107,6 @@ sub main(@) {
 }
 
 
-=item main(@ARGV)
-The main function checks for a specific run command and if none is provided will run
-a standard loop.
-
-=cut
-
-
 =item initialize($CONFIG)
 Input:
   \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
