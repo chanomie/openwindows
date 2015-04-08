@@ -17,12 +17,24 @@ use String::Util qw(trim);
 use URI;
 use vars qw($v $h);
 
+=head1 NAME
+
+  Windows.Toggle a module to notify when you should open/close your windows.
+
 =head1 SYNOPSIS
+  Usage: WindowsToggle [command]
 =cut
 
-###
-## Main function
-###
+
+=item main(@ARGV)
+Input:
+  @ARGV - typically the argument list from the command line
+
+Output: n/a
+
+The main function checks for a specific run command and if none is provided will run
+a standard loop.
+=cut
 sub main(@) {
   my $CONFIG = {};
   my $DATA;
@@ -94,15 +106,26 @@ sub main(@) {
   storeData($CONFIG, $DATA);
 }
 
-=head2 initialize
-* $CONFIG = the configuration hashref
-* returns $DATA = the data hashref
- 
-Initialize the environment by loading $CONFIG and $DATA.
 
-$CONFIG is configuration settings that are hard coded into the setup method.
-$DATA is configuration that is stored in a local data file.  The location and format of
-  the file is environment dependent.
+=item main(@ARGV)
+The main function checks for a specific run command and if none is provided will run
+a standard loop.
+
+=cut
+
+
+=item initialize($CONFIG)
+Input:
+  \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
+             into the setup method.
+
+Output:
+  \%DATA = the data hashref. Data is configuration that is stored in a local data
+           file.  The location and format of the file is environment dependent.
+
+
+
+Initialize the environment by loading $CONFIG and $DATA.
 =cut
 
 sub initialize($) {
@@ -159,7 +182,7 @@ sub initialize($) {
 }
 
 sub displayHelp() {
-  print("Usage: windowstoggle.pl [command]\n");
+  print("Usage: Windows.Toggle [command]\n");
   print("\n");
   print("Standard commands\n");
   print("  -none-                 passing no command will run the standard cycle of\n");
