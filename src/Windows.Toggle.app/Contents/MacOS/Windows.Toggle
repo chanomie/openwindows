@@ -120,7 +120,6 @@ Output:
 
 Initialize the environment by loading $CONFIG and $DATA.
 =cut
-
 sub initialize($) {
   my $CONFIG = shift;
   my $DATA;
@@ -174,8 +173,19 @@ sub initialize($) {
   return $DATA;   
 }
 
+=item displayHelp()
+Input:  None
+Output: None
+
+Display help to the system out.  Primarily used to display the various commands
+that can be run.
+=cut
 sub displayHelp() {
-  print("Usage: Windows.Toggle [command]\n");
+  print("Usage: Windows.Toggle [options] [command]\n");
+  print("\n");
+  print("Options\n");
+  print("  -v                     verbose prints output to the standard display\n");
+  print("  -h                     display help\n");
   print("\n");
   print("Standard commands\n");
   print("  -none-                 passing no command will run the standard cycle of\n");
@@ -191,6 +201,22 @@ sub displayHelp() {
   print("                         should be host1:port,host2:port\n");
   print("  growlNotify            sends a test growl notification\n");
 }
+
+=item initialize($CONFIG, $DATA)
+Input:
+  \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
+             into the setup method.
+  \%DATA = the data hashref. Data is configuration that is stored in a local data
+           file.  The location and format of the file is environment dependent.
+
+Output: None
+Throws:
+  Confesses if there is an missing data in settings that is required for standard
+  operations
+
+Validates the configuration and data to ensure that all settings are properly
+configured.
+=cut
 
 sub validateConfigAndData($$) {
   my $CONFIG = shift;
@@ -217,12 +243,16 @@ sub validateConfigAndData($$) {
   }
 }
 
-=head2 loadData
-* $CONFIG = the configuration hashref
-* returns $DATA = the data hashref
+=item loadData($CONFIG)
+Input:
+  \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
+             into the setup method.
 
-Loads the values of $DATA into a local file.  The location and format of the file is
-environment dependent.
+Output:
+  \%DATA = the data hashref. Data is configuration that is stored in a local data
+           file.  The location and format of the file is environment dependent.
+
+Loads the data from the local store.
 =cut
 sub loadData($) {
   my $CONFIG = shift;
@@ -239,9 +269,14 @@ sub loadData($) {
 }
 
 
-=head2 storeData
-* $CONFIG = the configuration hashref
-* $DATA = the data hashref
+=item loadData($CONFIG, $DATA)
+Input:
+  \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
+             into the setup method.
+  \%DATA = the data hashref. Data is configuration that is stored in a local data
+           file.  The location and format of the file is environment dependent.
+
+Output: None
 
 Stores the values of $DATA into a local file.  The location and format of the file is
 environment dependent.
@@ -260,6 +295,22 @@ sub storeData($$) {
   }
 }
 
+=item getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent)
+Input:
+  \%CONFIG   = the configuration hashref.  Configuration settings that are hard coded
+               into the setup method.
+  \%DATA     = the data hashref. Data is configuration that is stored in a local data
+               file.  The location and format of the file is environment dependent.
+  $userAgent = A LWP::UserAgent object used to make REST API calls to Nest
+
+Output:
+  $indoorTemperature      = the current indoor temperature
+  $hvacMode               = hvac mode can be heat, cool, heat-cool
+  $targetTemperatureLow   = the target low temperature for cool or heat-cool
+  $targetTemperatureHigh  = the target high temperature for heat or heat-cool
+
+Makes and API call to the Nest API to get back the current settings from the thermostat.
+=cut
 sub getIndoorTemperatureAndTargetNest($$$) {
   my $CONFIG = shift;
   my $DATA = shift;
