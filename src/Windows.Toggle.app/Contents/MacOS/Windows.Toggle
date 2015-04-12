@@ -22,21 +22,76 @@ use vars qw($v $h);
 
 =head1 NAME
 
-  Windows.Toggle a module to notify when you should open/close your windows.
+Windows.Toggle a module to notify when you should open/close your windows.
 
 =head1 SYNOPSIS
+
+We all love fresh air, but not when it gets in the way of the hard work your HVAC 
+system is doing.  `Windows.Toggle` watches the settings of your Nest Thermostate and
+the local weather sends a Growl notification to let you know when you should be opening
+and closing the windows.
+
   Usage: WindowsToggle [command]
-=cut
+  
+=head2 SETUP
 
+You'll need to run the following command lines options after you first download to
+setup the local settings.
 
-=item main(@ARGV)
-Input:
-  @ARGV - typically the argument list from the command line
+=over 4
 
-Output: n/a
+=item Set the Nest Client Secret for the App.
+
+  ./windowstoggle.pl setNestClientSecret [client-secret]
+
+=item Set the Forecast API key
+
+  ./windowstoggle.pl setForecastApiKey [forecast-api-key]
+
+=item Set your Latitude and Longitude to be used by the Forecast API to figure out the 
+      local outdoor weather.
+
+  ./windowstoggle.pl setLatLong [lat,long]
+
+=back    
+
+=head2 Other Commands
+
+=over 4
+
+=item Set the current Window State manually
+
+  ./windowstoggle.pl setWindowState [opened/closed]
+    
+=item Set the Nest Access Token if you want to skip the OAuth process.
+
+  ./windowstoggle.pl setNestAccessToken [access-token]
+  
+=back
+
+=head1 METHODS
+
+=head2 C<main(@ARGV)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item @ARGV
+
+typically the argument list from the command line
+
+=back
+
+=back
+
+=pod
 
 The main function checks for a specific run command and if none is provided will run
 a standard loop.
+
 =cut
 sub main(@) {
   my $CONFIG = {};
@@ -110,18 +165,38 @@ sub main(@) {
 }
 
 
-=item initialize($CONFIG)
-Input:
-  \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
-             into the setup method.
+=head2 C<initialize(\%CONFIG)>
 
-Output:
-  \%DATA = the data hashref. Data is configuration that is stored in a local data
-           file.  The location and format of the file is environment dependent.
+=over 4
 
+=item Input:
 
+=over 4
+
+=item \%CONFIG
+
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=back
+
+=item Output:
+
+=over 4
+
+=item \%DATA
+
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=back
+
+=back
+
+=pod
 
 Initialize the environment by loading $CONFIG and $DATA.
+
 =cut
 sub initialize($) {
   my $CONFIG = shift;
@@ -176,12 +251,11 @@ sub initialize($) {
   return $DATA;   
 }
 
-=item displayHelp()
-Input:  None
-Output: None
+=head2 C<displayHelp()>
 
 Display help to the system out.  Primarily used to display the various commands
 that can be run.
+
 =cut
 sub displayHelp() {
   print("Usage: Windows.Toggle [options] [command]\n");
@@ -205,22 +279,42 @@ sub displayHelp() {
   print("  growlNotify            sends a test growl notification\n");
 }
 
-=item initialize($CONFIG, $DATA)
-Input:
-  \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
-             into the setup method.
-  \%DATA = the data hashref. Data is configuration that is stored in a local data
-           file.  The location and format of the file is environment dependent.
 
-Output: None
-Throws:
-  Confesses if there is an missing data in settings that is required for standard
-  operations
+=head2 C<initialize(\%CONFIG, \%DATA)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=back
+
+=item Throws:
+
+=over 4
+
+=item Confesses if there is an missing data in settings that is required for standard
+      operations
+
+=back
+
+=back
+
+=pod
 
 Validates the configuration and data to ensure that all settings are properly
 configured.
-=cut
 
+=cut
 sub validateConfigAndData($$) {
   my $CONFIG = shift;
   my $DATA =shift;
@@ -246,7 +340,7 @@ sub validateConfigAndData($$) {
   }
 }
 
-=item loadData($CONFIG)
+=head2 loadData($CONFIG)
 Input:
   \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
              into the setup method.
@@ -272,7 +366,7 @@ sub loadData($) {
 }
 
 
-=item loadData($CONFIG, $DATA)
+=head2 loadData($CONFIG, $DATA)
 Input:
   \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
              into the setup method.
@@ -298,7 +392,7 @@ sub storeData($$) {
   }
 }
 
-=item getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent)
+=head2 getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent)
 Input:
   \%CONFIG   = the configuration hashref.  Configuration settings that are hard coded
                into the setup method.
