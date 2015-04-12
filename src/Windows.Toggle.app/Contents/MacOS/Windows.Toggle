@@ -280,7 +280,7 @@ sub displayHelp() {
 }
 
 
-=head2 C<initialize(\%CONFIG, \%DATA)>
+=head2 C<validateConfigAndData(\%CONFIG, \%DATA)>
 
 =over 4
 
