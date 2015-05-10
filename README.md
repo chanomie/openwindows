@@ -74,7 +74,7 @@ Initialize the environment by loading $CONFIG and $DATA.
 Display help to the system out.  Primarily used to display the various commands
 that can be run.
 
-## `initialize(\%CONFIG, \%DATA)`
+## `validateConfigAndData(\%CONFIG, \%DATA)`
 
 - Input:
     - \\%CONFIG
@@ -90,41 +90,51 @@ that can be run.
 Validates the configuration and data to ensure that all settings are properly
 configured.
 
-## loadData($CONFIG)
-Input:
-  \\%CONFIG = the configuration hashref.  Configuration settings that are hard coded
-             into the setup method.
+## `loadData(\%CONFIG)`
 
-Output:
-  \\%DATA = the data hashref. Data is configuration that is stored in a local data
-           file.  The location and format of the file is environment dependent.
+- Input:
+    - \\%CONFIG
+    the configuration hashref.  Configuration settings that are hard coded
+    into the setup method.
+- Output:
+    - \\%DATA
+    the data hashref. Data is configuration that is stored in a local data
+    file.  The location and format of the file is environment dependent.
 
 Loads the data from the local store.
 
-## loadData($CONFIG, $DATA)
-Input:
-  \\%CONFIG = the configuration hashref.  Configuration settings that are hard coded
-             into the setup method.
-  \\%DATA = the data hashref. Data is configuration that is stored in a local data
-           file.  The location and format of the file is environment dependent.
+## `storeData(\%CONFIG, \%DATA)`
 
-Output: None
+- Input:
+    - \\%CONFIG
+    the configuration hashref.  Configuration settings that are hard coded
+    into the setup method.
+    - \\%DATA
+    the data hashref. Data is configuration that is stored in a local data
+    file.  The location and format of the file is environment dependent.
 
 Stores the values of $DATA into a local file.  The location and format of the file is
 environment dependent.
 
-## getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent)
-Input:
-  \\%CONFIG   = the configuration hashref.  Configuration settings that are hard coded
-               into the setup method.
-  \\%DATA     = the data hashref. Data is configuration that is stored in a local data
-               file.  The location and format of the file is environment dependent.
-  $userAgent = A LWP::UserAgent object used to make REST API calls to Nest
+## `getIndoorTemperatureAndTargetNest(\%CONFIG, \%DATA, $userAgent)`
 
-Output:
-  $indoorTemperature      = the current indoor temperature
-  $hvacMode               = hvac mode can be heat, cool, heat-cool
-  $targetTemperatureLow   = the target low temperature for cool or heat-cool
-  $targetTemperatureHigh  = the target high temperature for heat or heat-cool
+- Input:
+    - \\%CONFIG
+    the configuration hashref.  Configuration settings that are hard coded
+    into the setup method.
+    - \\%DATA
+    the data hashref. Data is configuration that is stored in a local data
+    file.  The location and format of the file is environment dependent.
+    - $userAgent
+    A LWP::UserAgent object used to make REST API calls to Nest
+- Output:
+    - $indoorTemperature
+    the current indoor temperature
+    - $hvacMode
+    hvac mode can be heat, cool, heat-cool
+    - $targetTemperatureLow
+    the target low temperature for cool or heat-cool
+    - $targetTemperatureHigh
+    the target high temperature for heat or heat-cool
 
 Makes and API call to the Nest API to get back the current settings from the thermostat.

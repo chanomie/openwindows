@@ -16,9 +16,10 @@ use Growl::GNTP;
 use JSON;
 use Mac::PropertyList qw(parse_plist_fh create_from_hash);
 use LWP::UserAgent;
+use POSIX qw(strftime);
 use String::Util qw(trim);
 use URI;
-use vars qw($v $h);
+use vars qw($v $h $l);
 
 =head1 NAME
 
@@ -71,6 +72,10 @@ setup the local settings.
 
 =head1 METHODS
 
+=cut
+
+#### main(@ARGV) ####################################################
+
 =head2 C<main(@ARGV)>
 
 =over 4
@@ -93,6 +98,8 @@ The main function checks for a specific run command and if none is provided will
 a standard loop.
 
 =cut
+
+#####################################################################
 sub main(@) {
   my $CONFIG = {};
   my $DATA;
@@ -101,6 +108,9 @@ sub main(@) {
   
   ## Initialize the Configuration File
   $DATA = initialize($CONFIG);
+  
+  $CONFIG->{'LOG-WINDOW-STATE-BEFORE'} = $DATA->{'WINDOW-STATE'};
+  $CONFIG->{'LOG-WINDOW-STATE-UPDATED-BEFORE'} = $DATA->{'WINDOW-STATE-UPDATED'};
 
   if($h) {
     displayHelp();
@@ -141,6 +151,12 @@ sub main(@) {
         . "current windowState [$DATA->{'WINDOW-STATE'}]\n")
     if $v;
     
+    $CONFIG->{'LOG-INDOOR-TEMPERATURE'} = $indoorTemperature;
+    $CONFIG->{'LOG-TARGET-TEMPERATURE-LOW'} = $targetTemperatureLow;
+    $CONFIG->{'LOG-TARGET-TEMPERATURE-HIGH'} = $targetTemperatureHigh;
+    $CONFIG->{'LOG-OUTDOOR-TEMPERATURE'} = $outdoorTemperature;
+    $CONFIG->{'LOG-HVAC-MODE'} = $hvacMode;
+    
     if($hvacMode eq "heat-cool") {
       ## Trying to keep in a range, so just check if outdoor is in the range.
       if($outdoorTemperature > $targetTemperatureLow && $outdoorTemperature < $targetTemperatureHigh) {
@@ -161,9 +177,11 @@ sub main(@) {
       confess("Not yet implemented dealing with hvac mode of: $hvacMode");
     }
   }
+  printLogLine($CONFIG, $DATA) if $l;
   storeData($CONFIG, $DATA);
 }
 
+#### initialize(\%CONFIG) ###########################################
 
 =head2 C<initialize(\%CONFIG)>
 
@@ -198,6 +216,8 @@ file.  The location and format of the file is environment dependent.
 Initialize the environment by loading $CONFIG and $DATA.
 
 =cut
+
+#####################################################################
 sub initialize($) {
   my $CONFIG = shift;
   my $DATA;
@@ -251,17 +271,22 @@ sub initialize($) {
   return $DATA;   
 }
 
+#### displayHelp() ##################################################
+
 =head2 C<displayHelp()>
 
 Display help to the system out.  Primarily used to display the various commands
 that can be run.
 
 =cut
+
+#####################################################################
 sub displayHelp() {
   print("Usage: Windows.Toggle [options] [command]\n");
   print("\n");
   print("Options\n");
   print("  -v                     verbose prints output to the standard display\n");
+  print("  -l                     write out one log line\n");
   print("  -h                     display help\n");
   print("\n");
   print("Standard commands\n");
@@ -279,6 +304,8 @@ sub displayHelp() {
   print("  growlNotify            sends a test growl notification\n");
 }
 
+
+#### validateConfigAndData(\%CONFIG, \%DATA) ########################
 
 =head2 C<validateConfigAndData(\%CONFIG, \%DATA)>
 
@@ -315,6 +342,8 @@ Validates the configuration and data to ensure that all settings are properly
 configured.
 
 =cut
+
+#####################################################################
 sub validateConfigAndData($$) {
   my $CONFIG = shift;
   my $DATA =shift;
@@ -340,17 +369,42 @@ sub validateConfigAndData($$) {
   }
 }
 
-=head2 loadData($CONFIG)
-Input:
-  \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
-             into the setup method.
 
-Output:
-  \%DATA = the data hashref. Data is configuration that is stored in a local data
-           file.  The location and format of the file is environment dependent.
+#### loadData(\%CONFIG) #############################################
+
+=head2 C<loadData(\%CONFIG)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=back
+
+=item Output:
+
+=over 4
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=back
+
+=back
+
+=pod
 
 Loads the data from the local store.
+
 =cut
+
+#####################################################################
 sub loadData($) {
   my $CONFIG = shift;
 
@@ -365,19 +419,88 @@ sub loadData($) {
   }
 }
 
+#### printLogLine(\%CONFIG, \%DATA) ####################################
 
-=head2 loadData($CONFIG, $DATA)
-Input:
-  \%CONFIG = the configuration hashref.  Configuration settings that are hard coded
-             into the setup method.
-  \%DATA = the data hashref. Data is configuration that is stored in a local data
-           file.  The location and format of the file is environment dependent.
+=head2 C<printLogLine(\%CONFIG, \%DATA)>
 
-Output: None
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=back
+
+=back
+
+=pod
+
+Displays a single line to describe the before and after state for
+logging purposes.
+
+=cut
+
+#####################################################################
+sub printLogLine($$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  
+  print(sprintf("[%s]: Window State Before [%s] Updated [%s], After [%s], "
+      . "Indoor Temp [%s], Outdoor Temp [%s], "
+      . "Target Temp Low [%s], Target Temp High [%s], HVAC mode [%s], "
+      . "Within Quiet [%s], Grown Notify [%s] \n",
+    strftime("%m/%d/%Y %H:%M:%S",localtime(time())),
+  	$CONFIG->{'LOG-WINDOW-STATE-BEFORE'},
+  	strftime("%m/%d/%Y %H:%M:%S",localtime($CONFIG->{'LOG-WINDOW-STATE-UPDATED-BEFORE'})),
+  	$DATA->{'WINDOW-STATE'},
+  	$CONFIG->{'LOG-INDOOR-TEMPERATURE'},
+  	$CONFIG->{'LOG-OUTDOOR-TEMPERATURE'},
+  	$CONFIG->{'LOG-TARGET-TEMPERATURE-LOW'},
+  	$CONFIG->{'LOG-TARGET-TEMPERATURE-HIGH'},
+  	$CONFIG->{'LOG-HVAC-MODE'},
+  	$CONFIG->{"LOG-WITHIN-QUIET-TIME"},
+  	$CONFIG->{"LOG-GROWL-NOTIFY"}
+  ));
+}
+
+#### storeData(\%CONFIG, \%DATA) ####################################
+
+=head2 C<storeData(\%CONFIG, \%DATA)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=back
+
+=back
+
+=pod
 
 Stores the values of $DATA into a local file.  The location and format of the file is
 environment dependent.
+
 =cut
+
+#####################################################################
 sub storeData($$) {
   my $CONFIG = shift;
   my $DATA = shift;
@@ -392,22 +515,56 @@ sub storeData($$) {
   }
 }
 
-=head2 getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent)
-Input:
-  \%CONFIG   = the configuration hashref.  Configuration settings that are hard coded
-               into the setup method.
-  \%DATA     = the data hashref. Data is configuration that is stored in a local data
-               file.  The location and format of the file is environment dependent.
-  $userAgent = A LWP::UserAgent object used to make REST API calls to Nest
+#### getIndoorTemperatureAndTargetNest(\%CONFIG, \%DATA, $userAgent)
 
-Output:
-  $indoorTemperature      = the current indoor temperature
-  $hvacMode               = hvac mode can be heat, cool, heat-cool
-  $targetTemperatureLow   = the target low temperature for cool or heat-cool
-  $targetTemperatureHigh  = the target high temperature for heat or heat-cool
+=head2 C<getIndoorTemperatureAndTargetNest(\%CONFIG, \%DATA, $userAgent)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=item $userAgent
+A LWP::UserAgent object used to make REST API calls to Nest
+
+=back
+
+=item Output:
+
+=over 4
+
+=item $indoorTemperature
+the current indoor temperature
+
+=item $hvacMode
+hvac mode can be heat, cool, heat-cool
+
+=item $targetTemperatureLow
+the target low temperature for cool or heat-cool
+
+=item $targetTemperatureHigh
+the target high temperature for heat or heat-cool
+
+=back
+
+=back
+
+=pod
 
 Makes and API call to the Nest API to get back the current settings from the thermostat.
+
 =cut
+
+#####################################################################
 sub getIndoorTemperatureAndTargetNest($$$) {
   my $CONFIG = shift;
   my $DATA = shift;
@@ -453,6 +610,38 @@ sub getIndoorTemperatureAndTargetNest($$$) {
   }  
 }
 
+#### authenticateNest(\%CONFIG, \%DATA, $userAgent) #################
+
+=head2 C<authenticateNest(\%CONFIG, \%DATA, $userAgent)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=item $userAgent
+A LWP::UserAgent object used to make REST API calls to Nest
+
+=back
+
+=back
+
+=pod
+
+Makes and API call to the Nest API to get back the current settings from the thermostat.
+
+=cut
+
+#####################################################################
 sub authenticateNest($$$) {
   my $CONFIG = shift;
   my $DATA = shift;
@@ -533,17 +722,21 @@ sub setWindowState($$$$$) {
 
   ## Only update if it's been more than 30 minutes (1800 seconds)
   if(($currentTime - $DATA->{'WINDOW-STATE-UPDATED'}) > $CONFIG->{'GROWL-QUIET-TIME'}) {
+    $CONFIG->{"LOG-WITHIN-QUIET-TIME"} = "false";
     my $message = "It's $indoorTemperature insides and $outdoorTemperature outside.";
     if($existingWindowState eq "opened" && $newWindowState ne "opened") {
+      $CONFIG->{"LOG-GROWL-NOTIFY"} = "close";
       growlNotify($CONFIG, $DATA, "Close the windows.", $message, "closed");
       $DATA->{'WINDOW-STATE'} = 'closed';
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
     } elsif($existingWindowState eq "closed" && $newWindowState ne "closed") {
+      $CONFIG->{"LOG-GROWL-NOTIFY"} = "open";
       growlNotify($CONFIG, $DATA, "Open the windows.", $message, "opened");
       $DATA->{'WINDOW-STATE'} = 'opened';
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
     }
   } else {
+  	$CONFIG->{"LOG-WITHIN-QUIET-TIME"} = "true";
     print("Last update was too recent, silencing this one.\n") if $v;
   }
 }
