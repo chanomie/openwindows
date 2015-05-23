@@ -453,21 +453,25 @@ sub printLogLine($$) {
   my $CONFIG = shift;
   my $DATA = shift;
   
+  # As of Perl 5 you can use the "//" operator to say if the first value is undefined
+  # return the second value.  Added this in to avoid getting a warning message
+  # that properties aren't defined.
+  
   print(sprintf("[%s]: Window State Before [%s] Updated [%s], After [%s], "
       . "Indoor Temp [%s], Outdoor Temp [%s], "
       . "Target Temp Low [%s], Target Temp High [%s], HVAC mode [%s], "
       . "Within Quiet [%s], Grown Notify [%s] \n",
     strftime("%m/%d/%Y %H:%M:%S",localtime(time())),
-  	$CONFIG->{'LOG-WINDOW-STATE-BEFORE'},
-  	strftime("%m/%d/%Y %H:%M:%S",localtime($CONFIG->{'LOG-WINDOW-STATE-UPDATED-BEFORE'})),
-  	$DATA->{'WINDOW-STATE'},
-  	$CONFIG->{'LOG-INDOOR-TEMPERATURE'},
-  	$CONFIG->{'LOG-OUTDOOR-TEMPERATURE'},
-  	$CONFIG->{'LOG-TARGET-TEMPERATURE-LOW'},
-  	$CONFIG->{'LOG-TARGET-TEMPERATURE-HIGH'},
-  	$CONFIG->{'LOG-HVAC-MODE'},
-  	$CONFIG->{"LOG-WITHIN-QUIET-TIME"},
-  	$CONFIG->{"LOG-GROWL-NOTIFY"}
+  	$CONFIG->{'LOG-WINDOW-STATE-BEFORE'} // "",
+  	strftime("%m/%d/%Y %H:%M:%S",localtime($CONFIG->{'LOG-WINDOW-STATE-UPDATED-BEFORE'} // "0")),
+  	$DATA->{'WINDOW-STATE'} // "",
+  	$CONFIG->{'LOG-INDOOR-TEMPERATURE'} // "",
+  	$CONFIG->{'LOG-OUTDOOR-TEMPERATURE'} // "",
+  	$CONFIG->{'LOG-TARGET-TEMPERATURE-LOW'} // "",
+  	$CONFIG->{'LOG-TARGET-TEMPERATURE-HIGH'} // "",
+  	$CONFIG->{'LOG-HVAC-MODE'} // "",
+  	$CONFIG->{"LOG-WITHIN-QUIET-TIME"} // "",
+  	$CONFIG->{"LOG-GROWL-NOTIFY"} // ""
   ));
 }
 
