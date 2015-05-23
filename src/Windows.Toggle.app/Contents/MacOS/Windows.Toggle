@@ -768,28 +768,33 @@ sub growlNotify($$$$) {
       $growlPassword = '';
     }
 
-	print("Creating a new Growl Object for $growlPeerHost") if $v;
-    my $growl = Growl::GNTP->new(
-      AppName => "Windows.Toggle",
-      PeerHost => $growlPeerHost,
-      PeerPort => $growlPeerPort,
-      Password => $growlPassword,
-      Icon => $iconPath,
-      Debug => $v);
+	eval {
+      print("Creating a new Growl Object for $growlPeerHost") if $v;
+      my $growl = Growl::GNTP->new(
+        AppName => "Windows.Toggle",
+        PeerHost => $growlPeerHost,
+        PeerPort => $growlPeerPort,
+        Password => $growlPassword,
+        Icon => $iconPath,
+        Debug => $v);
     
-	print("Registering a new Growl Command") if $v;
-    $growl->register([{
-      Name => 'OPEN_WINDOW_STATUS',
-      DisplayName => 'Windows.Toggle'
-    }]);
+	  print("Registering a new Growl Command") if $v;
+      $growl->register([{
+        Name => 'OPEN_WINDOW_STATUS',
+        DisplayName => 'Windows.Toggle'
+      }]);
     
-	print("Notifying a new Growl Command") if $v;
-    $growl->notify(
-      Event => 'OPEN_WINDOW_STATUS',
-      Title => $title,
-      Message => $message,
-      Icon => $iconPath
-    );    
+	  print("Notifying a new Growl Command") if $v;
+      $growl->notify(
+        Event => 'OPEN_WINDOW_STATUS',
+        Title => $title,
+        Message => $message,
+        Icon => $iconPath
+      );
+    };
+    if($@) {
+      print("Failed to notify a Growl Command: $@") if $v;
+    }
   }  
 }
 
