@@ -104,6 +104,7 @@ sub main(@) {
   my $CONFIG = {};
   my $DATA;
   my $commandString = shift(@ARGV);
+  my ($dataKeyName, $dataKeyValue);
   my $userAgent = LWP::UserAgent->new();
   
   ## Initialize the Configuration File
@@ -116,7 +117,19 @@ sub main(@) {
     displayHelp();
   
   } elsif(defined($commandString)) {
-    if($commandString eq "setNestClientSecret") {
+    if($commandString eq "set") {
+      $dataKeyName = shift(@ARGV);
+      $dataKeyValue = shift(@ARGV);
+      $DATA->{$dataKeyName} = $dataKeyValue;
+    } elsif($commandString eq "show") {
+      $dataKeyName = shift(@ARGV);
+      print(sprintf("[%s] => [%s]\n", $dataKeyName, $DATA->{$dataKeyName}));
+    } elsif($commandString eq "delete") {
+      $dataKeyName = shift(@ARGV);
+      $dataKeyValue = $DATA->{$dataKeyName};
+      delete $DATA->{$dataKeyName};;
+      print(sprintf("Deleted [%s] => [%s]\n", $dataKeyName, $dataKeyValue));
+    } elsif($commandString eq "setNestClientSecret") {
       $DATA->{'NEST-CLIENT-SECRET'} = shift(@ARGV);
     } elsif ($commandString eq "setForecastApiKey") {
       $DATA->{'FORECAST-API-KEY'} = shift(@ARGV);
@@ -300,6 +313,26 @@ sub displayHelp() {
   print("  -none-                 passing no command will run the standard cycle of\n");
   print("                         checking temperatures and sending a grown notification\n");
   print("                         if the windows should be opened/closed\n");
+  print("  set [key]              sets a configuration key\n");  
+  print("  show [key]             shows the value of a configuration key\n");  
+  print("  delete [key]           delete a configuration key\n");
+  print("  growlNotify            sends a test growl notification\n");
+  print("  prowlNotify            sends a test prowl notification\n");
+  print("\n");
+  print("Keys\n");
+  print("  NEST-CLIENT-SECRET     the Nest client secret for the application\n");
+  print("  FORECAST-API-KEY       the Forecast.io API key for the application\n");
+  print("  LATITUDE-LONGITUDE     the Latitude and Longitude to use for checking\n");
+  print("                         the outside temprature\n");
+  print("  WINDOW-STATE           the current state of the windows to opened/closed\n");
+  print("  WINDOW-STATE-UPDATED   the last time the window state was updated using\n");
+  print("                         epoch seconds.\n");
+  print("  NEST-ACCESS-TOKEN      the Nest access token to skip OAuth dance\n");
+  print("  GROWL-PEER-LIST        the peer list of where to send growl notifications.\n");
+  print("                         should be host1:port,host2:port\n");
+  print("  PROWL-KEY-LIST         sets the api list of where to send prowl notifications.\n");
+  print("\n");
+  print("Deprecated commands\n");
   print("  setNestClientSecret    sets the Nest client secret for the application\n");
   print("  setForecastApiKey      sets the Forecast.io API key for the application\n");
   print("  setLatLong             sets the Latitude and Longitude to use for checking\n");
@@ -307,10 +340,8 @@ sub displayHelp() {
   print("  setWindowState         sets the current state of the windows to opened/closed\n");
   print("  setNestAccessToken     sets the Nest access token to skip OAuth dance\n");
   print("  setGrowlPeerList       sets the peer list of where to send growl notifications.\n");
-  print("  setProwlKeyList        sets the api list of where to send prowl notifications.\n");
   print("                         should be host1:port,host2:port\n");
-  print("  growlNotify            sends a test growl notification\n");
-  print("  prowlNotify            sends a test prowl notification\n");
+  print("  setProwlKeyList        sets the api list of where to send prowl notifications.\n");
 }
 
 
