@@ -129,6 +129,10 @@ sub main(@) {
       $DATA->{'NEST-ACCESS-TOKEN'} = shift(@ARGV);
     } elsif ($commandString eq "setGrowlPeerList") {
       $DATA->{'GROWL-PEER-LIST'} = shift(@ARGV);
+    } elsif ($commandString eq "setProwlKeyList") {
+      $DATA->{'PROWL-KEY-LIST'} = shift(@ARGV);
+    } elsif ($commandString eq 'prowlNotify') {
+      prowlNotify($CONFIG, $DATA, $userAgent, "Test Title", "Growl test message", "opened");
     } elsif ($commandString eq 'growlNotify') {
       growlNotify($CONFIG, $DATA, "Test Title", "Growl test message", "opened");
     } else {
@@ -160,17 +164,17 @@ sub main(@) {
     if($hvacMode eq "heat-cool") {
       ## Trying to keep in a range, so just check if outdoor is in the range.
       if($outdoorTemperature > $targetTemperatureLow && $outdoorTemperature < $targetTemperatureHigh) {
-        setWindowState($CONFIG, $DATA, $outdoorTemperature, $indoorTemperature, 'opened');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'opened');
       } else {
-        setWindowState($CONFIG, $DATA, $outdoorTemperature, $indoorTemperature, 'closed');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'closed');
       }
     } elsif ($hvacMode eq "cool") {
       if($outdoorTemperature < $indoorTemperature) {
         print("Updating window state to open.\n") if $v;
-        setWindowState($CONFIG, $DATA, $outdoorTemperature, $indoorTemperature, 'opened');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'opened');
       } else {
         print("Updating window state to closed.\n") if $v;
-        setWindowState($CONFIG, $DATA, $outdoorTemperature, $indoorTemperature, 'closed');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'closed');
       }
       
     } else {
@@ -238,6 +242,9 @@ sub initialize($) {
   
   ## How long should Growl notifications be paused after one is sent?
   $CONFIG->{'GROWL-QUIET-TIME'} = 0;
+  
+  ## Notify URL for sending a Prowl Post
+  $CONFIG->{'PROWL-POST-URL'} = 'https://api.prowlapp.com/publicapi/add';
     
   if($^O eq "darwin") {
     $CONFIG->{'DATA-FILE-TYPE'} = 'plist';
@@ -300,8 +307,10 @@ sub displayHelp() {
   print("  setWindowState         sets the current state of the windows to opened/closed\n");
   print("  setNestAccessToken     sets the Nest access token to skip OAuth dance\n");
   print("  setGrowlPeerList       sets the peer list of where to send growl notifications.\n");
+  print("  setProwlKeyList        sets the api list of where to send prowl notifications.\n");
   print("                         should be host1:port,host2:port\n");
   print("  growlNotify            sends a test growl notification\n");
+  print("  prowlNotify            sends a test prowl notification\n");
 }
 
 
@@ -706,9 +715,10 @@ sub getOutdoorTemperature($$$) {
   ## https://api.forecast.io/forecast/058e5e4407119ab672a888370c36f6a4/38.6332990,-121.3346720
 }
 
-sub setWindowState($$$$$) {
+sub setWindowState($$$$$$) {
   my $CONFIG = shift;
   my $DATA = shift;
+  my $userAgent = shift;
   my $outdoorTemperature = shift;
   my $indoorTemperature = shift;
   my $newWindowState = shift;
@@ -731,11 +741,13 @@ sub setWindowState($$$$$) {
     if($existingWindowState eq "opened" && $newWindowState ne "opened") {
       $CONFIG->{"LOG-GROWL-NOTIFY"} = "close";
       growlNotify($CONFIG, $DATA, "Close the windows.", $message, "closed");
+      prowlNotify($CONFIG, $DATA, $userAgent, "Close the windows.", $message);
       $DATA->{'WINDOW-STATE'} = 'closed';
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
     } elsif($existingWindowState eq "closed" && $newWindowState ne "closed") {
       $CONFIG->{"LOG-GROWL-NOTIFY"} = "open";
       growlNotify($CONFIG, $DATA, "Open the windows.", $message, "opened");
+      prowlNotify($CONFIG, $DATA, $userAgent, "Open the windows.", $message);
       $DATA->{'WINDOW-STATE'} = 'opened';
       $DATA->{'WINDOW-STATE-UPDATED'} = time();
     }
@@ -745,7 +757,7 @@ sub setWindowState($$$$$) {
   }
 }
 
-sub growlNotify($$$$) {
+sub growlNotify($$$$$) {
   my $CONFIG = shift;
   my $DATA = shift;
   my $title = shift;
@@ -800,6 +812,30 @@ sub growlNotify($$$$) {
       print("Failed to notify a Growl Command: $@") if $v;
     }
   }  
+}
+
+sub prowlNotify($$$$$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  my $userAgent = shift;
+  my $title = shift;
+  my $message = shift;
+  my $prowlKeyList = $DATA->{'PROWL-KEY-LIST'};
+  
+  if(defined $prowlKeyList && length(trim($prowlKeyList)) > 0) {
+    print("Notifying a new Prowl Command\n") if $v;
+
+    my $response = $userAgent->post($CONFIG->{'PROWL-POST-URL'},
+      [
+        'apikey' => $prowlKeyList,
+        'application' => 'Windows.Toggle',
+        'event' => $title,
+        'description' => $message
+      ]
+    );
+  } else {
+    print("No prowl keys to notify\n") if $v;
+  }
 }
 
 ###
