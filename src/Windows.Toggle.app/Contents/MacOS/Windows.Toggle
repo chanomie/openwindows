@@ -123,7 +123,11 @@ sub main(@) {
       $DATA->{$dataKeyName} = $dataKeyValue;
     } elsif($commandString eq "show") {
       $dataKeyName = shift(@ARGV);
-      print(sprintf("[%s] => [%s]\n", $dataKeyName, $DATA->{$dataKeyName}));
+      $dataKeyValue = "";
+      if(exists $DATA->{$dataKeyName}) {
+      	$dataKeyValue = $DATA->{$dataKeyName};
+      }
+      print(sprintf("[%s] => [%s]\n", $dataKeyName, $dataKeyValue));
     } elsif($commandString eq "delete") {
       $dataKeyName = shift(@ARGV);
       $dataKeyValue = $DATA->{$dataKeyName};
