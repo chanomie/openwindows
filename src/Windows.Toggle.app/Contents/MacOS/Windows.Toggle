@@ -255,7 +255,7 @@ sub initialize($) {
     . '&grant_type=authorization_code';
       
   $CONFIG->{'NEST-DATA-URL'} = 'https://developer-api.nest.com/';
-  $CONFIG->{'FORECAST-IO-URL'} = "https://api.forecast.io/forecast/APIKEY/LATLONG?exclude=minutely,hourly,daily,alerts,flags";
+  $CONFIG->{'FORECAST-IO-URL'} = "https://api.darksky.net/forecast/APIKEY/LATLONG?exclude=minutely,hourly,daily,alerts,flags";
   
   ## How long should Growl notifications be paused after one is sent?
   $CONFIG->{'GROWL-QUIET-TIME'} = 0;
