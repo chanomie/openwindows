@@ -395,13 +395,13 @@ sub validateConfigAndData($$) {
 
   ## Validate all the settings exists.
   if(!exists $DATA->{'NEST-CLIENT-SECRET'} || length(trim($DATA->{'NEST-CLIENT-SECRET'})) == 0) {
-  	push($validationErrors, "Missing config for [NEST-CLIENT-SECRET]. Set with command setNestClientSecret.");
+  	push(@$validationErrors, "Missing config for [NEST-CLIENT-SECRET]. Set with command setNestClientSecret.");
   }
   if(!exists $DATA->{'FORECAST-API-KEY'} || length(trim($DATA->{'FORECAST-API-KEY'})) == 0) {
-  	push($validationErrors, "Missing config for [FORECAST-API-KEY]. Set with command setForecastApiKey.");
+  	push(@$validationErrors, "Missing config for [FORECAST-API-KEY]. Set with command setForecastApiKey.");
   }
   if(!exists $DATA->{'LATITUDE-LONGITUDE'} || length(trim($DATA->{'LATITUDE-LONGITUDE'})) == 0) {
-  	push($validationErrors, "Missing config for [LATITUDE-LONGITUDE]. Set with command setLatLong.");
+  	push(@$validationErrors, "Missing config for [LATITUDE-LONGITUDE]. Set with command setLatLong.");
   }
   
   my $errorCount = scalar(@{$validationErrors});
@@ -633,7 +633,7 @@ sub getIndoorTemperatureAndTargetNest($$$) {
     
     # Get the first thermostat.  If there are no thermostats or multiple just throw
     # and error for now.
-    my @thermostatsNames = keys $dataJson->{"devices"}->{"thermostats"};
+    my @thermostatsNames = keys %{$dataJson->{"devices"}->{"thermostats"}};
     my $thermostatCount = scalar(@thermostatsNames);
     
     if($thermostatCount == 1) {
