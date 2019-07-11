@@ -1,4 +1,4 @@
-#!/usr/bin/perl -sw
+#!/usr/local/bin/perl -sw
 
 use strict;
 use warnings;
@@ -123,11 +123,18 @@ sub main(@) {
       $DATA->{$dataKeyName} = $dataKeyValue;
     } elsif($commandString eq "show") {
       $dataKeyName = shift(@ARGV);
-      $dataKeyValue = "";
-      if(exists $DATA->{$dataKeyName}) {
-      	$dataKeyValue = $DATA->{$dataKeyName};
+      if($dataKeyName) {
+        $dataKeyValue = "";
+        if(exists $DATA->{$dataKeyName}) {
+        	$dataKeyValue = $DATA->{$dataKeyName};
+        }      
+        print(sprintf("[%s] => [%s]\n", $dataKeyName, $dataKeyValue));
+      } else {
+        foreach $dataKeyName (keys %$DATA) {
+          $dataKeyValue = $DATA->{$dataKeyName};
+          print(sprintf("[%s] => [%s]\n", $dataKeyName, $dataKeyValue));
+        }
       }
-      print(sprintf("[%s] => [%s]\n", $dataKeyName, $dataKeyValue));
     } elsif($commandString eq "delete") {
       $dataKeyName = shift(@ARGV);
       $dataKeyValue = $DATA->{$dataKeyName};
@@ -160,6 +167,8 @@ sub main(@) {
   } else {
   
     validateConfigAndData($CONFIG, $DATA);
+    
+    # TODO: Check if NEST or Ecobee for Indoor Tempurature
     my ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
         getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent);
         
