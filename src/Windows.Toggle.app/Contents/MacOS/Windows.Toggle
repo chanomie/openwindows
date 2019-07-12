@@ -19,6 +19,7 @@ use LWP::UserAgent;
 use POSIX qw(strftime);
 use String::Util qw(trim);
 use URI;
+use URI::Encode qw(uri_encode uri_decode);
 use vars qw($v $h $l);
 
 =head1 NAME
@@ -810,9 +811,37 @@ sub getIndoorTemperatureAndTargetEcobee($$$) {
   my $userAgent = shift;
   
   authenticateEcobee($CONFIG, $DATA, $userAgent);
-  # 
-  die
+
+  my $thermostatUrl = 'https://api.ecobee.com/1/thermostat?json=';
+  my $requestJson = '{"selection":{'
+   . '"selectionType":"registered","selectionMatch":"",'
+   . '"includeSettings":"true","includeRuntime":"true"}}';
+
+  $thermostatUrl .= $requestJson;
   
+  my $response = $userAgent->get($thermostatUrl,
+    'Content-Type' => 'text/json',
+    'Authorization' => "Bearer " . $DATA->{'ECOBEE-ACCESS-TOKEN'});
+    
+  if($response->code() == 200) {
+    # print($response->as_string() . "\n");
+    my $dataJson = decode_json( $response->decoded_content() );
+    my @thermostatList = @{$dataJson->{"thermostatList"}};
+    my $hvacMode = $thermostatList[0]->{"settings"}->{"hvacMode"};
+    my $desiredHeat = $thermostatList[0]->{"runtime"}->{"desiredHeat"};
+    my $desiredCool = $thermostatList[0]->{"runtime"}->{"desiredCool"};
+    my $rawTemperature = $thermostatList[0]->{"runtime"}->{"rawTemperature"};
+    
+    
+    $desiredHeat = $desiredHeat/10;
+    $desiredCool = $desiredCool/10;
+    $rawTemperature = $rawTemperature/10;
+        
+    return ($rawTemperature, $hvacMode, $desiredHeat, $desiredCool);        
+  } else {
+    confess("Failed to get a valid response from ecobee:\n"
+      . $response->as_string());
+  }
 }
 
 
