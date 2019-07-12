@@ -130,7 +130,7 @@ sub main(@) {
         }      
         print(sprintf("[%s] => [%s]\n", $dataKeyName, $dataKeyValue));
       } else {
-        foreach $dataKeyName (keys %$DATA) {
+        foreach $dataKeyName (sort keys %$DATA) {
           $dataKeyValue = $DATA->{$dataKeyName};
           print(sprintf("[%s] => [%s]\n", $dataKeyName, $dataKeyValue));
         }
@@ -168,9 +168,17 @@ sub main(@) {
   
     validateConfigAndData($CONFIG, $DATA);
     
-    # TODO: Check if NEST or Ecobee for Indoor Tempurature
-    my ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
+    # TODO: Check if NEST or Ecobee for Indoor Temperature
+    my ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh);
+    if($DATA->{'DEVICE-TYPE'} eq "NEST") {
+      ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
         getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent);
+    } elsif($DATA->{'DEVICE-TYPE'} eq "ECOBEE") {
+      ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
+        getIndoorTemperatureAndTargetEcobee($CONFIG, $DATA, $userAgent);
+    } else {
+      carp("Missing or unknown device type.\n");
+    }
         
     my $outdoorTemperature = getOutdoorTemperature($CONFIG, $DATA, $userAgent);
     
@@ -262,7 +270,16 @@ sub initialize($) {
     . '&code=AUTHORIZATION_CODE&client_secret='
     . 'NEST-CLIENT-SECRET'
     . '&grant_type=authorization_code';
-      
+    
+  $CONFIG->{'ECOBEE-AUTHORIZE-URL'} = 'https://api.ecobee.com/authorize?client_id='
+    . 'ECOBEE-API-KEY'
+    . '&response_type=ecobeePin&scope=smartRead';
+    
+  $CONFIG->{'ECOBEE-TOKEN-URL'} = 'https://api.ecobee.com/token?client_id='
+    . 'ECOBEE-API-KEY';
+    
+  $CONFIG->{'ECOBEE-PIN-URL'} = 'https://www.ecobee.com/consumerportal/index.html#/my-apps/add/new';
+          
   $CONFIG->{'NEST-DATA-URL'} = 'https://developer-api.nest.com/';
   $CONFIG->{'FORECAST-IO-URL'} = "https://api.darksky.net/forecast/APIKEY/LATLONG?exclude=minutely,hourly,daily,alerts,flags";
   
@@ -333,14 +350,17 @@ sub displayHelp() {
   print("  prowlNotify            sends a test prowl notification\n");
   print("\n");
   print("Keys\n");
+  print("  DEVICE-TYPE            either NEST or ECOBEE to set which API to use\n");
   print("  NEST-CLIENT-SECRET     the Nest client secret for the application\n");
+  print("  NEST-ACCESS-TOKEN      the Nest access token to skip OAuth dance\n");
+  print("                         the outside temprature\n");
+  print("  ECOBEE-API-KEY         the Ecobee client secret for the application\n");
+  #print("  NEST-ACCESS-TOKEN      the Nest access token to skip OAuth dance\n");
   print("  FORECAST-API-KEY       the Forecast.io API key for the application\n");
   print("  LATITUDE-LONGITUDE     the Latitude and Longitude to use for checking\n");
-  print("                         the outside temprature\n");
   print("  WINDOW-STATE           the current state of the windows to opened/closed\n");
   print("  WINDOW-STATE-UPDATED   the last time the window state was updated using\n");
   print("                         epoch seconds.\n");
-  print("  NEST-ACCESS-TOKEN      the Nest access token to skip OAuth dance\n");
   print("  GROWL-PEER-LIST        the peer list of where to send growl notifications.\n");
   print("                         should be host1:port,host2:port\n");
   print("  PROWL-KEY-LIST         sets the api list of where to send prowl notifications.\n");
@@ -733,6 +753,166 @@ sub authenticateNest($$$) {
 			. $response->as_string());
 	}
   }
+}
+
+
+=head2 C<getIndoorTemperatureAndTargetEcobee(\%CONFIG, \%DATA, $userAgent)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=item $userAgent
+A LWP::UserAgent object used to make REST API calls to Ecobee
+
+=back
+
+=item Output:
+
+=over 4
+
+=item $indoorTemperature
+the current indoor temperature
+
+=item $hvacMode
+hvac mode can be heat, cool, heat-cool
+
+=item $targetTemperatureLow
+the target low temperature for cool or heat-cool
+
+=item $targetTemperatureHigh
+the target high temperature for heat or heat-cool
+
+=back
+
+=back
+
+=pod
+
+Makes and API call to the Nest API to get back the current settings from the thermostat.
+
+=cut
+
+#####################################################################
+sub getIndoorTemperatureAndTargetEcobee($$$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  my $userAgent = shift;
+  
+  authenticateEcobee($CONFIG, $DATA, $userAgent);
+  # 
+  die
+  
+}
+
+
+=head2 C<authenticateEcobee(\%CONFIG, \%DATA, $userAgent)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=item $userAgent
+A LWP::UserAgent object used to make REST API calls to Nest
+
+=back
+
+=back
+
+=pod
+
+Makes and API call to the Ecobee API to get back the current settings from the thermostat.
+
+=cut
+
+#####################################################################
+sub authenticateEcobee($$$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  my $userAgent = shift;
+
+  # Ecobee uses the modern three step process so we need to validate we have
+  # and active access token.  Since Ecobee access tokens expire every hour, the
+  # easiest and safest method is to refresh every time.
+  if(!exists $DATA->{'ECOBEE-REFRESH-TOKEN'}) {
+    my $authorizeTokenUrl = $CONFIG->{'ECOBEE-AUTHORIZE-URL'};
+    $authorizeTokenUrl =~ s/ECOBEE-API-KEY/$DATA->{'ECOBEE-API-KEY'}/;
+
+    my $response = $userAgent->get($authorizeTokenUrl);
+    if($response->code() == 200) {
+      my $dataJson = decode_json( $response->decoded_content() );
+      my $ecobeeCode = $dataJson->{"code"};
+      my $ecobeePin = $dataJson->{"ecobeePin"};
+      
+      print("Please enter the following PIN on the Ecobee site: ${ecobeePin}\n");
+      my $openBrowserReply = open_browser($CONFIG->{'ECOBEE-PIN-URL'});
+      if (! defined($openBrowserReply) ) {
+        print("Not able to open the browser, please direct your web browser to the following URL:\n");
+        print($CONFIG->{'ECOBEE-PIN-URL'} . "\n");
+        print("\n");
+      }
+      print("Once you have validated the app press enter.");
+      chomp(my $authorizationCode = <>);
+      
+      my $tokenUrl = $CONFIG->{'ECOBEE-TOKEN-URL'};
+      $tokenUrl =~ s/ECOBEE-API-KEY/$DATA->{'ECOBEE-API-KEY'}/;
+      $tokenUrl .= "&grant_type=ecobeePin&code=";
+      $tokenUrl .= $ecobeeCode;
+      
+      $response = $userAgent->post($tokenUrl);
+      if($response->code() == 200) {
+        $dataJson = decode_json( $response->decoded_content() );
+        $DATA->{'ECOBEE-ACCESS-TOKEN'} = $dataJson->{"access_token"};
+        $DATA->{'ECOBEE-REFRESH-TOKEN'} = $dataJson->{"refresh_token"};
+      } else {
+	    confess("Failed to get a valid ecobee token with response of:\n"
+	    . $response->as_string());
+	  }      
+	} else {
+	  confess("Failed to get a valid ecobee pin with response of:\n"
+	    . $response->as_string());
+	}
+  } else {
+    ## Refresh the token    
+    my $tokenUrl = $CONFIG->{'ECOBEE-TOKEN-URL'};
+    $tokenUrl =~ s/ECOBEE-API-KEY/$DATA->{'ECOBEE-API-KEY'}/;
+    $tokenUrl .= "&grant_type=refresh_token";
+    $tokenUrl .= "&refresh_token=";
+    $tokenUrl .= $DATA->{'ECOBEE-REFRESH-TOKEN'};    
+
+    my $response = $userAgent->post($tokenUrl);
+    if($response->code() == 200) {
+      my $dataJson = decode_json( $response->decoded_content() );
+      $DATA->{'ECOBEE-ACCESS-TOKEN'} = $dataJson->{"access_token"};
+      $DATA->{'ECOBEE-REFRESH-TOKEN'} = $dataJson->{"refresh_token"};
+    } else {
+      confess("Failed to refresh a valid ecobee token with response of:\n"
+	    . $response->as_string());
+	}      
+  }
+
+  # To avoid losing the newly retrieved access token save the new refresh/access token
+  storeData($CONFIG, $DATA);
 }
 
 sub getOutdoorTemperature($$$) {
