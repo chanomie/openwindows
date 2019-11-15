@@ -211,7 +211,14 @@ sub main(@) {
         print("Updating window state to closed.\n") if $v;
         setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'closed');
       }
-      
+    } elsif ($hvacMode eq "heat") {
+      if($outdoorTemperature > $indoorTemperature) {
+        print("Updating window state to open.\n") if $v;
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'opened');
+      } else {
+        print("Updating window state to closed.\n") if $v;
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'closed');
+      }      
     } else {
       confess("Not yet implemented dealing with hvac mode of: $hvacMode");
     }
