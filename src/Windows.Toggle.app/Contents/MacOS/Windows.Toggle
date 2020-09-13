@@ -156,6 +156,8 @@ sub main(@) {
       $DATA->{'GROWL-PEER-LIST'} = shift(@ARGV);
     } elsif ($commandString eq "setProwlKeyList") {
       $DATA->{'PROWL-KEY-LIST'} = shift(@ARGV);
+    } elsif ($commandString eq "checkAqi") {
+      checkAqi($CONFIG, $DATA, $userAgent);
     } elsif ($commandString eq 'prowlNotify') {
       prowlNotify($CONFIG, $DATA, $userAgent, "Test Title", "Growl test message", "opened");
     } elsif ($commandString eq 'growlNotify') {
@@ -291,6 +293,9 @@ sub initialize($) {
   $CONFIG->{'NEST-DATA-URL'} = 'https://developer-api.nest.com/';
   $CONFIG->{'FORECAST-IO-URL'} = "https://api.darksky.net/forecast/APIKEY/LATLONG?exclude=minutely,hourly,daily,alerts,flags";
   
+  
+  $CONFIG->{'PURPLE-URL'} = "https://www.purpleair.com/json?show=";
+  
   ## How long should Growl notifications be paused after one is sent?
   $CONFIG->{'GROWL-QUIET-TIME'} = 0;
   
@@ -322,9 +327,14 @@ sub initialize($) {
     $DATA = {};
   }
   
-  $CONFIG->{'NEST-ACCESS-TOKEN-URL'} =~ s/NEST-CLIENT-SECRET/$DATA->{'NEST-CLIENT-SECRET'}/;
-  $CONFIG->{'FORECAST-IO-URL'} =~ s/APIKEY/$DATA->{'FORECAST-API-KEY'}/;
-  $CONFIG->{'FORECAST-IO-URL'} =~ s/LATLONG/$DATA->{'LATITUDE-LONGITUDE'}/;
+  $CONFIG->{'NEST-ACCESS-TOKEN-URL'} =~ s/NEST-CLIENT-SECRET/$DATA->{'NEST-CLIENT-SECRET'}/
+    if exists $DATA->{'NEST-CLIENT-SECRET'};
+    
+  $CONFIG->{'FORECAST-IO-URL'} =~ s/APIKEY/$DATA->{'FORECAST-API-KEY'}/
+    if exists $DATA->{'FORECAST-API-KEY'};
+    
+  $CONFIG->{'FORECAST-IO-URL'} =~ s/LATLONG/$DATA->{'LATITUDE-LONGITUDE'}/
+    if exists $DATA->{'LATITUDE-LONGITUDE'};
 
   return $DATA;   
 }
@@ -354,6 +364,7 @@ sub displayHelp() {
   print("  set [key]              sets a configuration key\n");  
   print("  show [key]             shows the value of a configuration key\n");  
   print("  delete [key]           delete a configuration key\n");
+  print("  checkAqi               checks the air quality");
   print("  growlNotify            sends a test growl notification\n");
   print("  prowlNotify            sends a test prowl notification\n");
   print("\n");
@@ -363,9 +374,9 @@ sub displayHelp() {
   print("  NEST-ACCESS-TOKEN      the Nest access token to skip OAuth dance\n");
   print("                         the outside temprature\n");
   print("  ECOBEE-API-KEY         the Ecobee client secret for the application\n");
-  #print("  NEST-ACCESS-TOKEN      the Nest access token to skip OAuth dance\n");
   print("  FORECAST-API-KEY       the Forecast.io API key for the application\n");
   print("  LATITUDE-LONGITUDE     the Latitude and Longitude to use for checking\n");
+  print("  PURPLEID               the purple sensor ID\n");
   print("  WINDOW-STATE           the current state of the windows to opened/closed\n");
   print("  WINDOW-STATE-UPDATED   the last time the window state was updated using\n");
   print("                         epoch seconds.\n");
@@ -950,6 +961,59 @@ sub authenticateEcobee($$$) {
   # To avoid losing the newly retrieved access token save the new refresh/access token
   storeData($CONFIG, $DATA);
 }
+
+=head2 C<checkAqi(\%CONFIG, \%DATA, $userAgent)>
+
+=over 4
+
+=item Input:
+
+=over 4
+
+=item \%CONFIG
+the configuration hashref.  Configuration settings that are hard coded
+into the setup method.
+
+=item \%DATA
+the data hashref. Data is configuration that is stored in a local data
+file.  The location and format of the file is environment dependent.
+
+=item $userAgent
+A LWP::UserAgent object used to make REST API calls to Nest
+
+=back
+
+=back
+
+=pod
+
+Makes an API call to Purple Air to get back the air quality
+
+=cut
+sub checkAqi($$$) {
+  my $CONFIG = shift;
+  my $DATA = shift;
+  my $userAgent = shift;
+  
+  my $purpleUrl = URI->new($CONFIG->{'PURPLE-URL'});
+  $purpleUrl .= $DATA->{'PURPLEID'};
+  
+  my $response = $userAgent->get( 
+    $purpleUrl,
+  	'Accept'   => 'application/json'
+  );
+
+  if($response->code() == 200) {
+    my $dataJson = decode_json( $response->decoded_content() );
+    my $pm2Value = $dataJson->{'results'}[0]->{'PM2_5Value'};
+  } else {
+    confess("Failed to get data from Purple [" . $purpleUrl . "] with response of:\n"
+			. $response->as_string());
+  }
+
+  print ("$purpleUrl\n"); 
+}
+
 
 sub getOutdoorTemperature($$$) {
   my $CONFIG = shift;
