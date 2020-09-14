@@ -20,6 +20,7 @@ use POSIX qw(strftime);
 use String::Util qw(trim);
 use URI;
 use URI::Encode qw(uri_encode uri_decode);
+use Math::Round;
 use vars qw($v $h $l);
 
 =head1 NAME
@@ -994,6 +995,7 @@ sub checkAqi($$$) {
   my $CONFIG = shift;
   my $DATA = shift;
   my $userAgent = shift;
+  my $aqi = 0;
   
   my $purpleUrl = URI->new($CONFIG->{'PURPLE-URL'});
   $purpleUrl .= $DATA->{'PURPLEID'};
@@ -1006,14 +1008,53 @@ sub checkAqi($$$) {
   if($response->code() == 200) {
     my $dataJson = decode_json( $response->decoded_content() );
     my $pm2Value = $dataJson->{'results'}[0]->{'PM2_5Value'};
+    my $aqi = aqiFromPM($pm2Value);
+    
+    
   } else {
     confess("Failed to get data from Purple [" . $purpleUrl . "] with response of:\n"
 			. $response->as_string());
   }
 
-  print ("$purpleUrl\n"); 
+  return ${aqi}
 }
 
+sub aqiFromPM ($) {
+  my $pm = shift;
+  
+  if ($pm > 350.5) {
+		return calcAQI($pm, 500.0, 401.0, 500.0, 350.5)
+  } elsif ($pm > 250.5) {
+    return calcAQI($pm, 400.0, 301.0, 350.4, 250.5)
+  } elsif ($pm > 150.5) {
+    return calcAQI($pm, 300.0, 201.0, 250.4, 150.5)
+  } elsif ($pm > 55.5) {
+    return calcAQI($pm, 200.0, 151.0, 150.4, 55.5)
+  } elsif ($pm > 35.5) {
+    return calcAQI($pm, 150.0, 101.0, 55.4, 35.5)
+  } elsif ($pm > 12.1) {
+    return calcAQI($pm, 100.0, 51.0, 35.4, 12.1)
+  } elsif ($pm >= 0.0) {
+    return calcAQI($pm, 50.0, 0.0, 12.0, 0.0)
+  } else {
+    return "-"
+  }
+}
+
+
+# https://gist.github.com/jasonsnell/4b458e2775e11ff7dd8b21dd26aa504e
+sub calcAQI($$$$$) {
+  my $Cp = shift;
+  my $Ih = shift;
+  my $Il = shift;
+  my $BPh = shift;
+  my $BPl = shift;
+  
+  my $a = ($Ih - $Il);
+  my $b = ($BPh - $BPl);
+  my $c = ($Cp - $BPl);
+  return round( ($a/$b) * $c + $Il );
+}
 
 sub getOutdoorTemperature($$$) {
   my $CONFIG = shift;
