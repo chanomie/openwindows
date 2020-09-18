@@ -172,17 +172,27 @@ sub main(@) {
   
     validateConfigAndData($CONFIG, $DATA);
     
-    # TODO: Check if NEST or Ecobee for Indoor Temperature
     my ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh);
+    my $aqi = -1;
     if($DATA->{'DEVICE-TYPE'} eq "NEST") {
       ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
         getIndoorTemperatureAndTargetNest($CONFIG, $DATA, $userAgent);
     } elsif($DATA->{'DEVICE-TYPE'} eq "ECOBEE") {
       ($indoorTemperature, $hvacMode, $targetTemperatureLow, $targetTemperatureHigh) =
         getIndoorTemperatureAndTargetEcobee($CONFIG, $DATA, $userAgent);
+    } elsif($DATA->{'DEVICE-TYPE'} eq "TEST") {
+      $indoorTemperature = 72;
+      $hvacMode = "heat";
+      $targetTemperatureLow = 72;
+      $targetTemperatureHigh = 80;
     } else {
       carp("Missing or unknown device type.\n");
     }
+    
+    if(exists $DATA->{'PURPLEID'}) {
+      $aqi = checkAqi($CONFIG, $DATA, $userAgent);
+    }
+    
         
     my $outdoorTemperature = getOutdoorTemperature($CONFIG, $DATA, $userAgent);
     
@@ -190,6 +200,7 @@ sub main(@) {
         . "targetTemperatureLow [$targetTemperatureLow], "
         . "targetTemperatureHigh [$targetTemperatureHigh], "
         . "outdoorTemperature [$outdoorTemperature], "
+        . "aqi [$aqi], "
         . "current windowState [$DATA->{'WINDOW-STATE'}]\n")
     if $v;
     
@@ -202,25 +213,25 @@ sub main(@) {
     if($hvacMode eq "heat-cool") {
       ## Trying to keep in a range, so just check if outdoor is in the range.
       if($outdoorTemperature > $targetTemperatureLow && $outdoorTemperature < $targetTemperatureHigh) {
-        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'opened');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, $aqi, 'opened');
       } else {
-        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'closed');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, $aqi, 'closed');
       }
     } elsif ($hvacMode eq "cool") {
       if($outdoorTemperature < $indoorTemperature) {
         print("Updating window state to open.\n") if $v;
-        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'opened');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, $aqi, 'opened');
       } else {
         print("Updating window state to closed.\n") if $v;
-        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'closed');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, $aqi, 'closed');
       }
     } elsif ($hvacMode eq "heat") {
       if($outdoorTemperature > $indoorTemperature) {
         print("Updating window state to open.\n") if $v;
-        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'opened');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, $aqi, 'opened');
       } else {
         print("Updating window state to closed.\n") if $v;
-        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, 'closed');
+        setWindowState($CONFIG, $DATA, $userAgent, $outdoorTemperature, $indoorTemperature, $aqi, 'closed');
       }      
     } else {
       confess("Not yet implemented dealing with hvac mode of: $hvacMode");
@@ -443,9 +454,21 @@ sub validateConfigAndData($$) {
   my $validationErrors = [];
 
   ## Validate all the settings exists.
-  if(!exists $DATA->{'NEST-CLIENT-SECRET'} || length(trim($DATA->{'NEST-CLIENT-SECRET'})) == 0) {
-  	push(@$validationErrors, "Missing config for [NEST-CLIENT-SECRET]. Set with command setNestClientSecret.");
+  if(!exists $DATA->{'DEVICE-TYPE'} || length(trim($DATA->{'DEVICE-TYPE'})) == 0) {
+  	push(@$validationErrors, "Missing config for [DEVICE-TYPE].");
+  } elsif($DATA->{'DEVICE-TYPE'} eq "NEST") {
+    if(!exists $DATA->{'NEST-CLIENT-SECRET'} || length(trim($DATA->{'NEST-CLIENT-SECRET'})) == 0) {
+    	push(@$validationErrors, "Missing config for [NEST-CLIENT-SECRET]. Set with command setNestClientSecret.");
+    }
+  } elsif($DATA->{'DEVICE-TYPE'} eq "ECOBEE") {
+    if(!exists $DATA->{'ECOBEE-ACCESS-TOKEN'} || length(trim($DATA->{'ECOBEE-ACCESS-TOKEN'})) == 0) {
+    	push(@$validationErrors, "Missing config for [ECOBEE-ACCESS-TOKEN].");
+    }
+    if(!exists $DATA->{'ECOBEE-API-KEY'} || length(trim($DATA->{'ECOBEE-API-KEY'})) == 0) {
+    	push(@$validationErrors, "Missing config for [ECOBEE-API-KEY].");
+    }
   }
+
   if(!exists $DATA->{'FORECAST-API-KEY'} || length(trim($DATA->{'FORECAST-API-KEY'})) == 0) {
   	push(@$validationErrors, "Missing config for [FORECAST-API-KEY]. Set with command setForecastApiKey.");
   }
@@ -999,6 +1022,9 @@ sub checkAqi($$$) {
   
   my $purpleUrl = URI->new($CONFIG->{'PURPLE-URL'});
   $purpleUrl .= $DATA->{'PURPLEID'};
+
+  print("Calling Purple Air [$purpleUrl]\n")
+    if $v;
   
   my $response = $userAgent->get( 
     $purpleUrl,
@@ -1015,6 +1041,8 @@ sub checkAqi($$$) {
     confess("Failed to get data from Purple [" . $purpleUrl . "] with response of:\n"
 			. $response->as_string());
   }
+  print("aqiLevel [$aqi]\n")
+    if $v;
 
   return ${aqi}
 }
@@ -1080,12 +1108,13 @@ sub getOutdoorTemperature($$$) {
   ## https://api.forecast.io/forecast/058e5e4407119ab672a888370c36f6a4/38.6332990,-121.3346720
 }
 
-sub setWindowState($$$$$$) {
+sub setWindowState($$$$$$$) {
   my $CONFIG = shift;
   my $DATA = shift;
   my $userAgent = shift;
   my $outdoorTemperature = shift;
   my $indoorTemperature = shift;
+  my $aqi = shift;
   my $newWindowState = shift;
   my $currentTime = time();
   my $existingWindowState = $DATA->{'WINDOW-STATE'};
@@ -1102,7 +1131,7 @@ sub setWindowState($$$$$$) {
   ## Only update if it's been more than 30 minutes (1800 seconds)
   if(($currentTime - $DATA->{'WINDOW-STATE-UPDATED'}) > $CONFIG->{'GROWL-QUIET-TIME'}) {
     $CONFIG->{"LOG-WITHIN-QUIET-TIME"} = "false";
-    my $message = "It's $indoorTemperature insides and $outdoorTemperature outside.";
+    my $message = "It's $indoorTemperature inside and $outdoorTemperature outside with AQI $aqi.";
     if($existingWindowState eq "opened" && $newWindowState ne "opened") {
       $CONFIG->{"LOG-GROWL-NOTIFY"} = "close";
       growlNotify($CONFIG, $DATA, "Close the windows.", $message, "closed");
