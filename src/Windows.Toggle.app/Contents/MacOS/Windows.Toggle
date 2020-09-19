@@ -1018,7 +1018,7 @@ sub checkAqi($$$) {
   my $CONFIG = shift;
   my $DATA = shift;
   my $userAgent = shift;
-  my $aqi = 0;
+  my $aqi = -1;
   
   my $purpleUrl = URI->new($CONFIG->{'PURPLE-URL'});
   $purpleUrl .= $DATA->{'PURPLEID'};
@@ -1034,7 +1034,7 @@ sub checkAqi($$$) {
   if($response->code() == 200) {
     my $dataJson = decode_json( $response->decoded_content() );
     my $pm2Value = $dataJson->{'results'}[0]->{'PM2_5Value'};
-    my $aqi = aqiFromPM($pm2Value);
+    $aqi = aqiFromPM($pm2Value);
     
     
   } else {
